@@ -5,6 +5,7 @@
 
 body {
   overflow: hidden;
+  cursor: pointer;
 }
 
 svg {
@@ -15,8 +16,14 @@ svg {
 }
 
 svg line {
+  cursor: url(../assets/scissors.svg) 10 3, auto;
   stroke: black;
-  stroke-width: 2;
+  stroke-width: 3;
+}
+
+svg line:hover {
+  stroke-width: 7;
+  stroke: rgba(0, 0, 0, 0.5);
 }
 
 .module-map {
@@ -34,15 +41,13 @@ svg line {
   box-sizing: border-box;
   width: 20vh;
   height: 20vh;
-  margin: 8px;
-  cursor: move;
+  margin: 8px 0 0 8px;
 }
 
 .module {
   width: 20vh;
   height: 20vh;
   position: absolute;
-  cursor: move;
 }
 
 [class^='endpoint']{
@@ -58,10 +63,39 @@ svg line {
 [class^='endpoint']:hover {
   border-color: rgba(255, 255, 0, 0.7);
 }
+
 .endpoint-out {
   right:-20px;
 }
 
 .endpoint-in {
   left: -20px;
+}
+
+.grabbable {
+  cursor: grab;
+}
+
+.grabbing {
+  cursor: grabbing !important;
+}
+
+.trash {
+  background-color: rgba(63, 63, 63, 0.7);
+  position: absolute;
+  text-align: center;
+  line-height: 100px;
+  height: 100px;
+  width: 100px;
+  bottom: 50px;
+  right: 50px;
+  border-radius: 50%;
+  transition: 0.5s all;
+}
+
+.trash:hover {
+  background-color: rgba(63, 63, 63, 0.4);
+  height: 150px;
+  width: 150px;
+  line-height: 150px;
 }

@@ -39,7 +39,10 @@ class Endpoint {
     this.connections = [];
 
     this.elem = document.createElement('div');
-    this.elem.addEventListener('mousedown', e => dragEndpoint(e, this));
+    this.elem.addEventListener('pointerdown', e => {
+      if (e.which != 1) return e; // only catch left clicks
+      dragEndpoint(e, this);
+    });
 
     switch(direction) {
       case 'in':
@@ -49,13 +52,14 @@ class Endpoint {
         this.elem.classList.add('endpoint-out');
         break;
     }
+    this.elem.classList.add('grabbable');
 
     parent.elem.appendChild(this.elem);
   }
 
   connectAtCursor(line) {
     let hovered = Array.from(document.querySelectorAll(':hover'));
-    let targetClass = this.direction == 'in'? 'endpoint-out': 'endpoint-in';
+    let targetClass = 'endpoint-' + opposite(this.direction);
 
     let destination;
     if (hovered.find(el => {
@@ -68,6 +72,12 @@ class Endpoint {
       this.connections.push({endpoint:destination, line:line});
       destination.connections.push({endpoint:this, line:line});
       destination.snapLines();
+
+      line.addEventListener('click', e => {
+        this.removeConnection(destination);
+        destination.removeConnection(this);
+        line.remove();
+      });
     } else {
       line.remove();
     }
@@ -84,10 +94,21 @@ class Endpoint {
     return this.connections.find(c => c.endpoint == endpoint);
   }
 
+  removeConnection(endpoint) {
+    this.connections = this.connections.filter(c => c.endpoint != endpoint);
+  }
+
   snapLines() {
     let midpoint = getMidpoint(this.elem);
     this.connections.forEach(c => {
       snapToPoint(c.line, midpoint.x, midpoint.y, this.direction);
+    });
+  }
+
+  destroySelf() {
+    this.connections.forEach(c => {
+      c.endpoint.removeConnection(this);
+      c.line.remove();
     });
   }
 }
@@ -99,6 +120,7 @@ class Module {
 
     this.elem = document.createElement('div');
     this.elem.classList.add('module');
+    this.elem.classList.add('grabbable');
 
     this.endpointIn = new Endpoint('in', this);
     this.endpointOut = new Endpoint('out', this);
@@ -107,6 +129,12 @@ class Module {
   snapLines() {
     this.endpointIn.snapLines();
     this.endpointOut.snapLines();
+  }
+
+  destroySelf() {
+    this.endpointIn.destroySelf();
+    this.endpointOut.destroySelf();
+    this.elem.remove();
   }
 }
 
@@ -117,15 +145,25 @@ class ModuleMap {
 
     this.buildConnectionMap();
     this.buildModuleBank();
+    this.buildTrash();
   }
 
   buildConnectionMap() {
-    let styles = window.getComputedStyle(this.elem);
     this.connectionMap = document.createElementNS("http://www.w3.org/2000/svg", 'svg');
+
+    let styles = window.getComputedStyle(this.elem);
     this.connectionMap.setAttribute('width', styles.getPropertyValue('width'));
     this.connectionMap.setAttribute('height', styles.getPropertyValue('height'));
 
     this.elem.parentNode.appendChild(this.connectionMap);
+  }
+
+  buildTrash() { // ;)
+    this.trash = document.createElement('div');
+    this.trash.classList.add('trash');
+    this.trash.innerHTML = 'trash';
+
+    this.elem.parentNode.appendChild(this.trash);
   }
 
   buildModuleBank() {
@@ -137,12 +175,12 @@ class ModuleMap {
       let protoElem = document.createElement('div');
       protoElem.innerHTML = prototype;
       protoElem.classList.add('module-prototype');
+      protoElem.classList.add('grabbable');
       protoElem.style.backgroundColor = interpolatedColorString(i, modulePrototypes.length);
       this.moduleBank.appendChild(protoElem);
 
-      protoElem.addEventListener('mousedown', e => {
+      protoElem.addEventListener('pointerdown', e => {
         if (e.which != 1) return e; // only catch left clicks
-        e.preventDefault();
         this.makeModule(e, prototype)
       });
     });
@@ -162,12 +200,12 @@ class ModuleMap {
     modElem.style.top = rect.top + "px";
     modElem.style.backgroundColor = e.target.style.backgroundColor;
 
-    modElem.addEventListener('mousedown', function(e) {
+    modElem.addEventListener('pointerdown', function(e) {
       if (e.which != 1) return e; // only catch left clicks
-      e.preventDefault();
-      dragModule(mod, e.clientX, e.clientY);
+      dragModule(e, mod);
     });
-    dragModule(mod, e.clientX, e.clientY);
+
+    dragModule(e, mod);
   }
 
   findEndpoint(el, direction) {
@@ -180,10 +218,21 @@ class ModuleMap {
   }
 }
 
-function dragModule(mod, startX, startY) {
+function toggleGrabbingCursor() {
+  document.body.classList.toggle('grabbing');
+  for (el of document.getElementsByClassName('grabbable')) {
+    el.classList.toggle('grabbing');
+  }
+}
+
+function dragModule(e, mod) {
+  e.preventDefault();
+  e.stopPropagation();
+  toggleGrabbingCursor();
+
   rect = mod.elem.getBoundingClientRect();
-  let xOffset = rect.left - startX;
-  let yOffset = rect.top - startY;
+  let xOffset = rect.left - e.clientX;
+  let yOffset = rect.top - e.clientY;
 
   let drag = function(e) {
     e.preventDefault();
@@ -194,17 +243,24 @@ function dragModule(mod, startX, startY) {
 
   let endDrag = function(e) {
     e.preventDefault();
-    document.removeEventListener('mousemove', drag);
-    document.removeEventListener('mouseup', endDrag);
+    document.removeEventListener('pointermove', drag);
+    document.removeEventListener('pointerup', endDrag);
+    toggleGrabbingCursor();
+
+    if (document.querySelector('.trash:hover')) {
+      mod.destroySelf();
+    }
   }
 
-  document.addEventListener('mousemove', drag);
-  document.addEventListener('mouseup', endDrag);
+  document.addEventListener('pointermove', drag);
+  document.addEventListener('pointerup', endDrag);
 }
 
 function dragEndpoint(e, endpoint) {
   e.preventDefault();
   e.stopPropagation();
+  toggleGrabbingCursor();
+
   let line = document.createElementNS("http://www.w3.org/2000/svg", 'line');
   let midpoint = getMidpoint(e.target);
   snapToPoint(line, midpoint.x, midpoint.y, endpoint.direction);
@@ -218,14 +274,16 @@ function dragEndpoint(e, endpoint) {
 
   let endDrag = function(e) {
     e.preventDefault();
-    document.removeEventListener('mousemove', drag);
-    document.removeEventListener('mouseup', endDrag);
+    document.removeEventListener('pointermove', drag);
+    document.removeEventListener('pointerup', endDrag);
+    toggleGrabbingCursor();
 
+    line.style.pointerEvents = "all";
     endpoint.connectAtCursor(line);
   }
 
-  document.addEventListener('mousemove', drag);
-  document.addEventListener('mouseup', endDrag);
+  document.addEventListener('pointermove', drag);
+  document.addEventListener('pointerup', endDrag);
 }
 
 document.addEventListener('DOMContentLoaded', function() {
