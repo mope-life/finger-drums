@@ -4,10 +4,236 @@
   <meta charset="utf-8">
   <title>module-map</title>
   <link rel="stylesheet" href="styles/main.css">
+
+  <script type="module">
+    import "./scripts/main.js"
+  </script>
+
 </head>
 <body>
-  <div class="module-map" data-module-prototypes="Wave Generator,EQ,Compressor,Gain">
+
+  <div id="module-map">
+	<div id="prototype-bank"></div>
+	<div id="trash-can">trash</div>
+	<svg id="connection-map"></svg>
   </div>
+
+  <template id="keys-template">
+	<style>
+	  :host {
+		--key-border-radius: 0.5em;
+		/*--yellowed-ivory: #ffffe8;*/
+
+		background-color: black;
+		display: flex;
+		flex-wrap: wrap;
+		border-radius: var(--key-border-radius);
+	  }
+
+	  * {
+		box-sizing: border-box;
+	  }
+
+	  .key {
+		height: 50%;
+		position: relative;
+		border-left: 1px solid transparent;
+		border-right: 1px solid transparent;
+		background-clip: content-box;
+		font: 0.5em monospace;
+	  }
+
+	  .key span {
+		position: absolute;
+		bottom: 0;
+		left: 10%;
+	  }
+
+	  .key.white {
+		color: black;
+		background-color: var(--piano-key-color);
+		width: calc(100% / 10);
+		border-bottom-left-radius: var(--key-border-radius);
+		border-bottom-right-radius: var(--key-border-radius);
+	  }
+
+	  .key.white.b-e {
+		border-top-left-radius: var(--key-border-radius);
+	  }
+
+	  .key.white.c-f {
+		border-top-right-radius: var(--key-border-radius);
+	  }
+
+	  .key.white.a-d-g {
+		border-top-right-radius: var(--key-border-radius);
+		border-top-left-radius: var(--key-border-radius);
+	  }
+
+	  .key.black {
+		color: white;
+		width: calc(14% / 2.4);
+		border-radius: var(--key-border-radius);
+		margin-bottom: 1px;
+	  }
+
+	  .key.spacer {
+		width: calc(14% / 2.4);
+		height: calc(50% + 1px);
+		background-color: var(--piano-key-color);
+		border-top-left-radius: var(--key-border-radius);
+		border-top-right-radius: var(--key-border-radius);
+	  }
+
+	  .key.spacer.thin {
+		width: calc(13% / 2.4)
+	  }
+
+	  .key.spacer.thick {
+		width: calc(15% / 2.4)
+	  }
+
+	  /* Remove border from end keys on end */
+	  #z, #z-spacer {
+		border-left: 0;
+	  }
+
+	  #\/, #\/-spacer {
+		border-right: 0;
+	  }
+
+	  .key.white.held, .key.spacer.held {
+		background-color: #fdc;
+		border-left: 2px inset #fdc !important;
+	  }
+
+	  .key.black.held {
+		background-color: #300;
+		border-left: 2px inset #300;
+	  }
+	</style>
+
+    <!-- Top row (black keys) -->
+    <div class="thick spacer key" id="z-spacer"></div>
+    <div class="black key" id='s'><span>S</span></div>
+    <div class="spacer key" id="x-spacer"></div>
+    <div class="black key" id='d'><span>D</span></div>
+    <div class="thick spacer key" id="c-spacer"></div>
+    <div class="thin spacer key" id="v-spacer"></div>
+    <div class="black key" id='g'><span>G</span></div>
+    <div class="spacer key" id="b-spacer"></div>
+    <div class="black key" id='h'><span>H</span></div>
+    <div class="spacer key" id="n-spacer"></div>
+    <div class="black key" id='j'><span>J</span></div>
+    <div class="thin spacer key" id="m-spacer"></div>
+    <div class="thick spacer key" id=",-spacer"></div>
+    <div class="black key" id='l'><span>L</span></div>
+    <div class="spacer key" id=".-spacer"></div>
+    <div class="black key" id=';'><span>;</span></div>
+    <div class="thick spacer key" id="/-spacer"></div>
+
+    <!-- Bottom row (white keys) -->
+    <div class="white key c-f" id='z'><span>Z</span></div>
+    <div class="white key a-d-g" id='x'><span>X</span></div>
+    <div class="white key b-e" id='c'><span>C</span></div>
+    <div class="white key c-f" id='v'><span>V</span></div>
+    <div class="white key a-d-g" id='b'><span>B</span></div>
+    <div class="white key a-d-g" id='n'><span>N</span></div>
+    <div class="white key b-e" id='m'><span>M</span></div>
+    <div class="white key c-f" id=','><span>,</span></div>
+    <div class="white key a-d-g" id='.'><span>.</span></div>
+    <div class="white key b-e" id='/'><span>/</span></div>
+  </template>
+
+  <template id="knob-template">
+	<style>
+	  :host {
+		display: flex;
+	  }
+
+	  div.inputs {
+		display: flex;
+		flex-direction: column;
+		margin-right: 3px;
+	  }
+
+	  input {
+		color: var(--number-input-color);
+		background-color: var(--number-input-background-color);
+		font: var(--number-input-font);
+		width: var(--number-input-width);
+	  }
+
+	  label {
+		font: var(--label-font);
+		text-align: justify;
+		text-align-last: justify;
+	  }
+
+	  svg {
+		height: 88px;
+	  }
+
+	  /*Hide the arrows on inputs*/
+ 	  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
+	  }
+
+	  input[type=number] {
+		-moz-appearance: textfield;
+	  }
+	</style>
+	<div class="inputs">
+	  <label>
+		min:
+		<input type="number" data-attr="min">
+	  </label>
+	  <label>
+		max:
+		<input type="number" data-attr="max">
+	  </label>
+	  <label>
+		prec:
+		<input type="number" data-attr="prec">
+	  </label>
+	  <label>
+		value:
+		<input type="number" data-attr="value">
+	  </label>
+	</div>
+
+	<svg viewBox="-1 -1 2 2">
+	  <mask id="mask">
+		<rect x="-1" y="-1" width="2" height="2" fill="white">
+		</rect>
+		<circle cx="1.7" cy="0" r="0.8" fill="black">
+		</circle>
+		<circle cx="1.2020815280171309" cy="1.2020815280171306" r="0.8" fill="black">
+		</circle>
+		<circle cx="1.0409497792752501e-16" cy="1.7" r="0.8" fill="black">
+		</circle>
+		<circle cx="-1.2020815280171306" cy="1.2020815280171309" r="0.8" fill="black">
+		</circle>
+		<circle cx="-1.7" cy="2.0818995585505003e-16" r="0.8" fill="black">
+		</circle>
+		<circle cx="-1.202081528017131" cy="-1.2020815280171306" r="0.8" fill="black">
+		</circle>
+		<circle cx="-3.1228493378257504e-16" cy="-1.7" r="0.8" fill="black">
+		</circle>
+		<circle cx="1.2020815280171304" cy="-1.202081528017131" r="0.8" fill="black">
+		</circle>
+	  </mask>
+	  <g mask="url(#mask)">
+		<circle cx="0" cy="0" r="1" fill="black">
+		</circle>
+		<circle cx="0" cy="0" r="0.65" fill="#b0b0b8">
+		</circle>
+		<circle cx="-0.3138004145393736" cy="0.757581216659255" r="0.05" fill="white">
+		</circle>
+	  </g>
+	</svg>
+  </template>
+
 </body>
-<script src="scripts/app.js"></script>
 </html>

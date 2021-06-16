@@ -1,75 +1,126 @@
+:root {
+  --wire-color: yellow;
+  --wire-hover-color: rgba(255, 255, 0, 0.5);
+  --piano-key-color:#ffffe8;
+  --map-background: #141414;
+  --module-background: #777;
+  --module-border: 5px outset #999;
+  --label-font: 0.5em monospace;
+
+  --number-input-color: lime;
+  --number-input-background-color: black;
+  --number-input-width: 4.5em;
+  --number-input-font: 1.3em monospace;
+}
+
 * {
-  margin:0;
-  padding:0;
+  box-sizing: border-box;
 }
 
 body {
+  margin: 0;
+  padding: 0;
   overflow: hidden;
-  cursor: pointer;
 }
 
-svg {
+#connection-map {
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 100vh;
   width: 100vw;
-  position: absolute;
   pointer-events: none;
+  z-index: 2;
 }
 
-svg line {
+#connection-map line {
   cursor: url(../assets/scissors.svg) 10 3, auto;
-  stroke: black;
+  stroke: var(--wire-color);
   stroke-width: 3;
 }
 
-svg line:hover {
+#connection-map line:hover {
   stroke-width: 7;
-  stroke: rgba(0, 0, 0, 0.5);
+  stroke: var(--wire-hover-color);
 }
 
-.module-map {
-  position:absolute;
+#module-map {
+  background: var(--map-background);
+  position: absolute;
   height: 100vh;
   width: 100vw;
 }
 
-.module-bank {
-  display: flex;
-  align-items: start;
+#prototype-bank {
+  position: absolute;
+  display: grid;
 }
 
 .module-prototype {
-  box-sizing: border-box;
-  width: 20vh;
-  height: 20vh;
-  margin: 8px 0 0 8px;
+  color: white;
+  background: var(--module-background);
+  border: var(--module-border);
+  margin: 8px 4px 0 4px;
+  padding: 0 1em;
 }
 
-.module {
-  width: 20vh;
-  height: 20vh;
+.module-wrapper {
+  background: var(--module-background);
+  border: var(--module-border);
+  padding: 8px 4px 8px 4px;
   position: absolute;
+  display: flex;
+  align-items: stretch;
 }
 
-[class^='endpoint']{
-  top: calc(50% - 20px);
-  position:absolute;
-  height: 20px;
-  width: 20px;
+.endpoint-label {
+  position: relative;
+  top: -5px;
+  font: var(--label-font);
+  display: inline-block;
+  line-height: 10px;
+  margin: 0;
+}
+
+.endpoint-socket {
+  display: inline-block;
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
   background-color: black;
-  background-clip: content-box;
-  border: rgba(0, 0, 0, 0) solid 10px;
+  background-clip: padding-box;
+  border: transparent solid 10px;
+  box-sizing: content-box;
 }
 
-[class^='endpoint']:hover {
-  border-color: rgba(255, 255, 0, 0.7);
+.endpoint-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.endpoint-out {
-  right:-20px;
+.endpoint-socket:hover {
+  border-color: var(--wire-hover-color);
 }
 
-.endpoint-in {
-  left: -20px;
+.endpoint-bank {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  flex-direction: column;
+  flex-grow: 0;
+}
+
+.control-bank {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex-grow: 1;
+  padding: 0 2px;
+}
+
+.control-bank:empty {
+  padding: 0;
 }
 
 .grabbable {
@@ -80,8 +131,9 @@ svg line:hover {
   cursor: grabbing !important;
 }
 
-.trash {
-  background-color: rgba(63, 63, 63, 0.7);
+#trash-can {
+  color: white;
+  background-color: rgba(63, 63, 63, 1);
   position: absolute;
   text-align: center;
   line-height: 100px;
@@ -91,11 +143,44 @@ svg line:hover {
   right: 50px;
   border-radius: 50%;
   transition: 0.5s all;
+  z-index: 2;
 }
 
-.trash:hover {
+#trash-can:hover {
   background-color: rgba(63, 63, 63, 0.4);
   height: 150px;
   width: 150px;
   line-height: 150px;
+}
+
+control-keys {
+  height: 100%;
+  width: 300px;
+}
+
+input[type=number] {
+  color: var(--number-input-color);
+  background-color: var(--number-input-background-color);
+  font: var(--number-input-font);
+  width: var(--number-input-width);
+
+  /*Hide the arrows on inputs (polyfill)*/
+  -moz-appearance: textfield;
+}
+
+/*Hide the arrows on inputs (polyfill)*/
+input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+label.number-label {
+  font: var(--label-font);
+  text-align: justify;
+  text-align-last: justify;
+}
+
+label.radio-label {
+  display: inline-block;
+  font: var(--label-font);
 }
