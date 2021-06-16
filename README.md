@@ -8,7 +8,7 @@ Since the JavaScript uses imports, you'll have to host the site on a local web s
 # why should i care?
 It's fun to play with! With the addition of a recording feature, this can also have practical uses in music production. It can also be used as a sandbox to test out modular ideas before purchasing any expensive equipment.
 
-# where are we at?
+# where are we now?
 The basic functionality of several modules (keys, const, env) is in place. I also believe that the core structure of the project is complete. Here is an image of a working set-up with a nifty sub-octave square wave:
 
 ![example](/examples/snapshot.png)
