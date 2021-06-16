@@ -29,5 +29,5 @@ The basic functionality of several modules (keys, const, env) is in place. I als
 - Midi compatibility
 
 ### Similar projects:
-- [Zupiter](z.musictools.live) -- *I discovered Zupiter after I started this project, but I have taken some inspiration from it*
-- [ModularGrid](www.modulargrid.net) -- *modular synthesis database and planner with real-world modules*
+- [Zupiter](http://z.musictools.live/) -- *I discovered Zupiter after I started this project, but I have taken some inspiration from it*
+- [ModularGrid](http://www.modulargrid.net) -- *modular synthesis database and planner with real-world modules*
