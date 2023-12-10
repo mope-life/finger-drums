@@ -1,6 +1,5 @@
 const MODULE_MAP_HTML_ID = "module-map";
 const CONNECTION_MAP_HTML_ID = "connection-map";
-const PROTOTYPE_BANK_HTML_ID = "prototype-bank";
 const TRASH_CAN_HTML_ID = "trash-can";
 
 const MODULE_PROTOTYPE_HTML_CLASS = "module-prototype";
@@ -35,10 +34,6 @@ const DOMManager = {
 
   get connectionMapElement() {
 	return document.getElementById(CONNECTION_MAP_HTML_ID);
-  },
-
-  get prototypeBankElement() {
-	return document.getElementById(PROTOTYPE_BANK_HTML_ID);
   },
 
   get hovered() {

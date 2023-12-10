@@ -51,7 +51,7 @@ body {
   width: 100vw;
 }
 
-#prototype-bank {
+#module-prototype-bank {
   position: absolute;
   display: grid;
 }

@@ -9,6 +9,9 @@ import { EndpointIn, EndpointOut } from "./classes/endpoint.js";
 const moduleMap = new Map();
 const endpointMap = new Map();
 
+var app = Elm.AudioModuleBank.init({
+  node: document.getElementById("module-prototype-bank")
+});
 
 /* Helper functions for moving items during clicks-and-drags */
 function elementMidpoint(elt) {
@@ -81,18 +84,6 @@ Module.prototype.addControls = function() {
 	controlElt.addEventListener('input', e => this.input(i, e));
   }
 };
-
-
-/* Set up the prototype bank */
-for (let key of ModuleClassMap.keys()) {
-  let modulePrototypeElem = DOMManager.createModulePrototypeElement();
-  modulePrototypeElem.dataset.moduleClassKey = key;
-  modulePrototypeElem.textContent = key;
-  DOMManager.prototypeBankElement.appendChild(modulePrototypeElem);
-
-  modulePrototypeElem.addEventListener('pointerdown', prototypePointerDownHandler);
-}
-
 
 /* Creates and drags new Module upon clicking a prototype. */
 function prototypePointerDownHandler(e) {
