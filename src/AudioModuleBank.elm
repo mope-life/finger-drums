@@ -2,41 +2,54 @@ module AudioModuleBank exposing (main)
 
 import Browser
 import Html exposing (Html, text, div)
-import Html.Attributes exposing (class, id)
+import Html.Attributes exposing (class, id, style)
 import Html.Events exposing (onMouseDown)
+import Dict exposing (Dict)
+import Platform.Cmd as Cmd
+import Draggable
+import Draggable.Events exposing (onDragBy, onDragStart, onDragEnd)
+import Html.Attributes exposing (style)
 
 
 {- MAIN -}
-main = Browser.element
-  { init = init
-  , view = view
-  , update = update
-  , subscriptions = subscriptions
-  }
+main : Program () Model Msg
+main =
+  Browser.element
+    { init = init
+    , view = view
+    , update = update
+    , subscriptions = subscriptions
+    }
 
 
 init : () -> ( Model, Cmd Msg )
-init _ =
-  ( { audioModules =
-      [ ConstantModule
-      , VCAModule
-      , VCOModule
-      , EnvelopeModule
-      ]
-      , elementsCreated = 0
-    }
-  , Cmd.none
+init _ = (
+    { audioModules = Dict.empty
+    , draggedModule = Nothing
+    , nextId = 0
+    , drag = Draggable.init
+    } 
+    , Cmd.none
   )
 
 
 {- MODEL -}
 type alias Model =
-  { audioModules : List AudioModule
-  , elementsCreated : Int
+  { audioModules : Dict Id AudioModule
+  , draggedModule : Maybe AudioModule
+  , nextId : Id
+  , drag : Draggable.State Id
   }
 
+type alias Id = Int
 
-type AudioModule
+type alias AudioModule =
+  { type_ : AudioModuleType
+  , id : Id
+  , position : (Float, Float)
+  }
+
+type AudioModuleType
   = ControllerModule
   | DestinationModule
   | ConstantModule
@@ -45,56 +58,143 @@ type AudioModule
   | EnvelopeModule
 --| More to come!
 
-
-type alias Msg = AudioModule
+type Msg
+  = Click AudioModuleType
+  | OnDragStart Id
+  | OnDragEnd
+  | OnDragBy Draggable.Delta
+  | DragMsg (Draggable.Msg Id)
 
 
 {- SUBSCRIPTIONS -}
 subscriptions : Model -> Sub Msg
-subscriptions model =
-  Sub.none
+subscriptions { drag } =
+  Draggable.subscriptions DragMsg drag
 
 
 {- UPDATE -}
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-  ( model
-  , Cmd.none
-  )
+  case msg of
+    Click moduleType ->
+      (insertNewAudioModule moduleType model
+      , Cmd.none)
+    OnDragStart id ->
+      (startDragging id model
+      , Cmd.none)
+    OnDragEnd ->
+      (endDragging model
+      , Cmd.none)
+    OnDragBy delta ->
+      (repositionDraggedModule delta model
+      , Cmd.none)
+    DragMsg dragMsg ->
+      Draggable.update dragConfig dragMsg model
+
+repositionDraggedModule : Draggable.Delta -> Model -> Model
+repositionDraggedModule delta model =
+  { model | draggedModule =
+      Maybe.map (repositionModule delta) model.draggedModule }
+
+repositionModule : Draggable.Delta ->  AudioModule -> AudioModule
+repositionModule (deltaX, deltaY) audioModule =
+  let
+    (x, y) = audioModule.position
+  in
+    { audioModule | position = (x + deltaX, y + deltaY) }
+
+startDragging : Id -> Model -> Model
+startDragging id model =
+  { model
+    | draggedModule = Dict.get id model.audioModules
+    , audioModules = Dict.remove id model.audioModules
+  }
+
+endDragging : Model -> Model
+endDragging model =
+  case model.draggedModule of
+    Nothing -> model
+    Just audioModule ->
+      model
+      |> insertAudioModule audioModule
+      |> \m -> { m | draggedModule = Nothing }
+
+insertAudioModule : AudioModule -> Model -> Model
+insertAudioModule audioModule model =
+  { model
+    | audioModules = Dict.insert audioModule.id audioModule model.audioModules
+  }
+
+insertNewAudioModule : AudioModuleType -> Model -> Model
+insertNewAudioModule moduleType model =
+  model
+  |> insertAudioModule (createAudioModule moduleType model.nextId)
+  |> \m -> { m | nextId = m.nextId + 1 }
+
+createAudioModule : AudioModuleType -> Id -> AudioModule
+createAudioModule moduleType id =
+  { type_ = moduleType
+  , id = id
+  , position = (0, 0)
+  }
+
+dragConfig : Draggable.Config Int Msg
+dragConfig =
+  Draggable.customConfig
+    [ onDragBy OnDragBy
+    , onDragStart OnDragStart
+    , onDragEnd OnDragEnd
+    ]
 
 
 {- VIEW -}
 view : Model -> Html Msg
 view model =
   div [id "module-prototype-bank"]
-    (List.filterMap audioModulePrototype model.audioModules)
+    ( List.concat
+      [ List.map prototypeElement creatablePrototypes
+      , viewAudioModules model
+      ]
+    )
 
+viewAudioModules : Model -> List (Html Msg)
+viewAudioModules model =
+  Dict.values model.audioModules
+  |> \list -> (
+    case model.draggedModule of
+      Nothing -> list
+      Just audioModule -> audioModule :: list
+    )
+  |> List.map audioModuleElement
 
-audioModulePrototype : AudioModule -> Maybe (Html Msg)
-audioModulePrototype audioModule =
-  case (audioModuleName audioModule) of
-    Nothing
-      -> Nothing
+audioModuleElement : AudioModule -> Html Msg
+audioModuleElement audioModule =
+  let
+    (x, y) = audioModule.position
+  in
+    div
+      [ class "module-wrapper"
+      , class "grabbable"
+      , style "position" "absolute"
+      , style "left" ((String.fromInt (round x)) ++ "px")
+      , style "top" ((String.fromInt (round y)) ++ "px")
+      , Draggable.mouseTrigger audioModule.id DragMsg
+      ]
+      [ ]
 
-    Just string
-      -> Just ( div
-        [ class "module-prototype"
-        , class "grabbable"
-        , onMouseDown audioModule
-        ]
-        [ text string ]
-      )
+creatablePrototypes : List (AudioModuleType, String)
+creatablePrototypes =
+  [ ( ConstantModule, "Const")
+  , ( VCOModule, "VCO")
+  , ( VCAModule, "VCA")
+  , ( EnvelopeModule, "Envelope")
+  ]
 
-
-audioModuleName : AudioModule -> Maybe String
-audioModuleName audioModule =
-  case audioModule of
-    ConstantModule -> Just "Const"
-    VCOModule -> Just "VCO"
-    VCAModule -> Just "VCA"
-    EnvelopeModule -> Just "Envelope"
-
-    {- These two modules are special; they are not created from the module
-    bank, as there should only be one of each of them -}
-    ControllerModule -> Nothing
-    DestinationModule -> Nothing
+prototypeElement : (AudioModuleType, String) -> Html Msg
+prototypeElement ( moduleType, name ) =
+  div
+    [ class "module-prototype"
+    , class "grabbable"
+    , onMouseDown (Click moduleType)
+    ]
+    [ text name ]
