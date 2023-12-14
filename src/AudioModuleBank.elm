@@ -3,12 +3,12 @@ module AudioModuleBank exposing (main)
 import Browser
 import Html exposing (Html, text, div)
 import Html.Attributes exposing (class, id, style)
-import Html.Events exposing (onMouseDown)
 import Dict exposing (Dict)
 import Platform.Cmd as Cmd
 import Draggable
 import Draggable.Events exposing (onDragBy, onDragStart, onDragEnd)
 import Html.Attributes exposing (style)
+import Json.Decode as D
 
 
 {- MAIN -}
@@ -59,12 +59,23 @@ type AudioModuleType
 --| More to come!
 
 type Msg
-  = Click AudioModuleType
+  = CreateAndStartDrag (Draggable.Msg Id) CreateInfo
   | OnDragStart Id
   | OnDragEnd
   | OnDragBy Draggable.Delta
   | DragMsg (Draggable.Msg Id)
 
+type alias ClickInfo =
+  { offsetX : Float
+  , offsetY : Float
+  , pageX : Float
+  , pageY : Float
+  }
+
+type alias CreateInfo =
+  { clickInfo : ClickInfo
+  , typeClicked : AudioModuleType
+  }
 
 {- SUBSCRIPTIONS -}
 subscriptions : Model -> Sub Msg
@@ -76,9 +87,16 @@ subscriptions { drag } =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
-    Click moduleType ->
-      (insertNewAudioModule moduleType model
-      , Cmd.none)
+    CreateAndStartDrag dragMsg {clickInfo, typeClicked} ->
+      let newModule = createAudioModule typeClicked clickInfo model.nextId
+      in
+        Draggable.update
+        dragConfig
+        dragMsg
+        ( model
+          |> insertAudioModule newModule
+          |> \m -> { m | nextId = m.nextId + 1 }
+        )
     OnDragStart id ->
       (startDragging id model
       , Cmd.none)
@@ -98,10 +116,8 @@ repositionDraggedModule delta model =
 
 repositionModule : Draggable.Delta ->  AudioModule -> AudioModule
 repositionModule (deltaX, deltaY) audioModule =
-  let
-    (x, y) = audioModule.position
-  in
-    { audioModule | position = (x + deltaX, y + deltaY) }
+  let (x, y) = audioModule.position
+  in { audioModule | position = ( x + deltaX, y + deltaY ) }
 
 startDragging : Id -> Model -> Model
 startDragging id model =
@@ -125,17 +141,14 @@ insertAudioModule audioModule model =
     | audioModules = Dict.insert audioModule.id audioModule model.audioModules
   }
 
-insertNewAudioModule : AudioModuleType -> Model -> Model
-insertNewAudioModule moduleType model =
-  model
-  |> insertAudioModule (createAudioModule moduleType model.nextId)
-  |> \m -> { m | nextId = m.nextId + 1 }
-
-createAudioModule : AudioModuleType -> Id -> AudioModule
-createAudioModule moduleType id =
+createAudioModule : AudioModuleType -> ClickInfo -> Id -> AudioModule
+createAudioModule moduleType clickInfo id =
   { type_ = moduleType
   , id = id
-  , position = (0, 0)
+  , position =
+    ( clickInfo.pageX - clickInfo.offsetX
+    , clickInfo.pageY - clickInfo.offsetY
+    )
   }
 
 dragConfig : Draggable.Config Int Msg
@@ -152,7 +165,7 @@ view : Model -> Html Msg
 view model =
   div [id "module-prototype-bank"]
     ( List.concat
-      [ List.map prototypeElement creatablePrototypes
+      [ List.map (prototypeElement model.nextId) creatablePrototypes
       , viewAudioModules model
       ]
     )
@@ -169,18 +182,16 @@ viewAudioModules model =
 
 audioModuleElement : AudioModule -> Html Msg
 audioModuleElement audioModule =
-  let
-    (x, y) = audioModule.position
-  in
-    div
-      [ class "module-wrapper"
-      , class "grabbable"
-      , style "position" "absolute"
-      , style "left" ((String.fromInt (round x)) ++ "px")
-      , style "top" ((String.fromInt (round y)) ++ "px")
-      , Draggable.mouseTrigger audioModule.id DragMsg
-      ]
-      [ ]
+  let (x, y) = audioModule.position
+  in div
+    [ class "module-wrapper"
+    , class "grabbable"
+    , style "position" "absolute"
+    , style "left" ((String.fromInt (round x)) ++ "px")
+    , style "top" ((String.fromInt (round y)) ++ "px")
+    , Draggable.mouseTrigger audioModule.id DragMsg
+    ]
+    [ ]
 
 creatablePrototypes : List (AudioModuleType, String)
 creatablePrototypes =
@@ -190,11 +201,24 @@ creatablePrototypes =
   , ( EnvelopeModule, "Envelope")
   ]
 
-prototypeElement : (AudioModuleType, String) -> Html Msg
-prototypeElement ( moduleType, name ) =
+prototypeElement : Id -> (AudioModuleType, String) -> Html Msg
+prototypeElement nextId ( moduleType, name ) =
   div
     [ class "module-prototype"
     , class "grabbable"
-    , onMouseDown (Click moduleType)
+    , Draggable.customMouseTrigger
+      nextId
+      (mouseDownDecoder moduleType)
+      CreateAndStartDrag
     ]
     [ text name ]
+
+mouseDownDecoder : AudioModuleType -> D.Decoder CreateInfo
+mouseDownDecoder type_ =
+  (D.map4 ClickInfo
+    ( D.field "offsetX" D.float)
+    ( D.field "offsetY" D.float)
+    ( D.field "pageX" D.float)
+    ( D.field "pageY" D.float)
+  )
+  |> D.map (\ci -> { clickInfo = ci, typeClicked = type_} )
