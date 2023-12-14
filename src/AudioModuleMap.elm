@@ -1,14 +1,14 @@
-module AudioModuleBank exposing (main)
+module AudioModuleMap exposing (main)
 
 import Browser
-import Html exposing (Html, text, div)
-import Html.Attributes exposing (class, id, style)
+import Html
+import Html.Attributes as Attributes
+import Svg
 import Dict exposing (Dict)
 import Platform.Cmd as Cmd
+import Json.Decode as Decode
 import Draggable
-import Draggable.Events exposing (onDragBy, onDragStart, onDragEnd)
-import Html.Attributes exposing (style)
-import Json.Decode as D
+import Draggable.Events
 
 
 {- MAIN -}
@@ -23,8 +23,8 @@ main =
 
 
 init : () -> ( Model, Cmd Msg )
-init _ = (
-    { audioModules = Dict.empty
+init _ =
+  ( { audioModules = Dict.empty
     , draggedModule = Nothing
     , nextId = 0
     , drag = Draggable.init
@@ -111,8 +111,9 @@ update msg model =
 
 repositionDraggedModule : Draggable.Delta -> Model -> Model
 repositionDraggedModule delta model =
-  { model | draggedModule =
-      Maybe.map (repositionModule delta) model.draggedModule }
+  { model 
+    | draggedModule = Maybe.map (repositionModule delta) model.draggedModule
+  }
 
 repositionModule : Draggable.Delta ->  AudioModule -> AudioModule
 repositionModule (deltaX, deltaY) audioModule =
@@ -154,23 +155,27 @@ createAudioModule moduleType clickInfo id =
 dragConfig : Draggable.Config Int Msg
 dragConfig =
   Draggable.customConfig
-    [ onDragBy OnDragBy
-    , onDragStart OnDragStart
-    , onDragEnd OnDragEnd
+    [ Draggable.Events.onDragBy OnDragBy
+    , Draggable.Events.onDragStart OnDragStart
+    , Draggable.Events.onDragEnd OnDragEnd
     ]
 
-
 {- VIEW -}
-view : Model -> Html Msg
+view : Model -> Html.Html Msg
 view model =
-  div [id "module-prototype-bank"]
-    ( List.concat
-      [ List.map (prototypeElement model.nextId) creatablePrototypes
-      , viewAudioModules model
-      ]
-    )
+  Html.div [ Attributes.id "audio-module-map" ]
+  (List.concat [
+    [ Html.div [Attributes.id "prototype-bank"]
+      (List.map (prototypeElement model.nextId) creatablePrototypes)
+    , Html.div [Attributes.id "trash-can"]
+      [Html.text "trash"]
+    , Svg.svg [Attributes.id "connection-map"]
+      []
+    ]
+    , viewAudioModules model
+  ] )
 
-viewAudioModules : Model -> List (Html Msg)
+viewAudioModules : Model -> List (Html.Html Msg)
 viewAudioModules model =
   Dict.values model.audioModules
   |> \list -> (
@@ -180,15 +185,14 @@ viewAudioModules model =
     )
   |> List.map audioModuleElement
 
-audioModuleElement : AudioModule -> Html Msg
+audioModuleElement : AudioModule -> Html.Html Msg
 audioModuleElement audioModule =
   let (x, y) = audioModule.position
-  in div
-    [ class "module-wrapper"
-    , class "grabbable"
-    , style "position" "absolute"
-    , style "left" ((String.fromInt (round x)) ++ "px")
-    , style "top" ((String.fromInt (round y)) ++ "px")
+  in Html.div
+    [ Attributes.class "module-wrapper"
+    , Attributes.class "grabbable"
+    , Attributes.style "left" ((String.fromInt (round x)) ++ "px")
+    , Attributes.style "top" ((String.fromInt (round y)) ++ "px")
     , Draggable.mouseTrigger audioModule.id DragMsg
     ]
     [ ]
@@ -201,24 +205,25 @@ creatablePrototypes =
   , ( EnvelopeModule, "Envelope")
   ]
 
-prototypeElement : Id -> (AudioModuleType, String) -> Html Msg
+prototypeElement : Id -> (AudioModuleType, String) -> Html.Html Msg
 prototypeElement nextId ( moduleType, name ) =
-  div
-    [ class "module-prototype"
-    , class "grabbable"
+  Html.div
+    [ Attributes.class "module-prototype"
+    , Attributes.class "grabbable"
     , Draggable.customMouseTrigger
       nextId
       (mouseDownDecoder moduleType)
       CreateAndStartDrag
     ]
-    [ text name ]
+    [ Html.text name ]
 
-mouseDownDecoder : AudioModuleType -> D.Decoder CreateInfo
+mouseDownDecoder : AudioModuleType -> Decode.Decoder CreateInfo
 mouseDownDecoder type_ =
-  (D.map4 ClickInfo
-    ( D.field "offsetX" D.float)
-    ( D.field "offsetY" D.float)
-    ( D.field "pageX" D.float)
-    ( D.field "pageY" D.float)
+  (Decode.map4 ClickInfo
+    ( Decode.field "offsetX" Decode.float)
+    ( Decode.field "offsetY" Decode.float)
+    ( Decode.field "pageX" Decode.float)
+    ( Decode.field "pageY" Decode.float)
   )
-  |> D.map (\ci -> { clickInfo = ci, typeClicked = type_} )
+  |> Decode.map (\ci -> { clickInfo = ci, typeClicked = type_} )
+

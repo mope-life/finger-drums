@@ -3,7 +3,7 @@ srcdir:=src
 
 # is this a normal way to write a Makefile?
 sources:=$(patsubst %,$(srcdir)/%,		\
-	AudioModuleBank.elm					\
+	AudioModuleMap.elm					\
 )
 
 # these would include .elm files that don't actually produce a Program

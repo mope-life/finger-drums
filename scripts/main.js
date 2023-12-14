@@ -9,8 +9,8 @@ import { EndpointIn, EndpointOut } from "./classes/endpoint.js";
 const moduleMap = new Map();
 const endpointMap = new Map();
 
-var app = Elm.AudioModuleBank.init({
-  node: document.getElementById("module-prototype-bank")
+var app = Elm.AudioModuleMap.init({
+  node: document.getElementById("audio-module-map")
 });
 
 /* Helper functions for moving items during clicks-and-drags */
