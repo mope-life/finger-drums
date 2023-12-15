@@ -6,6 +6,7 @@
   --module-background: #777;
   --module-border: 5px outset #999;
   --label-font: 0.5em monospace;
+  --prototype-bank-background: #bfbfbf;
 
   --number-input-color: lime;
   --number-input-background-color: black;
@@ -52,25 +53,40 @@ body {
 }
 
 #prototype-bank {
+  background: var(--prototype-bank-background);
+  height: 100vh;
   position: absolute;
   display: grid;
+  align-content: start;
+  gap: 2em;
+  padding: 1em;
 }
 
-.module-prototype {
-  color: white;
-  background: var(--module-background);
-  border: var(--module-border);
-  margin: 8px 4px 0 4px;
-  padding: 0 1em;
+#prototype-bank > .module-wrapper {
+  justify-self: center;
+  align-self: start;
+  position: relative;
+}
+
+.prototype-click-shield {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  z-index: 10;
 }
 
 .module-wrapper {
   background: var(--module-background);
   border: var(--module-border);
   padding: 8px 4px 8px 4px;
-  position: absolute;
   display: flex;
   align-items: stretch;
+}
+
+#audio-module-map > .module-wrapper {
+  z-index: 100
 }
 
 .endpoint-label {
@@ -82,7 +98,7 @@ body {
   margin: 0;
 }
 
-.endpoint-socket {
+.endpoint-jack {
   display: inline-block;
   border-radius: 50%;
   width: 10px;
@@ -129,28 +145,6 @@ body {
 
 .grabbing {
   cursor: grabbing !important;
-}
-
-#trash-can {
-  color: white;
-  background-color: rgba(63, 63, 63, 1);
-  position: absolute;
-  text-align: center;
-  line-height: 100px;
-  height: 100px;
-  width: 100px;
-  bottom: 50px;
-  right: 50px;
-  border-radius: 50%;
-  transition: 0.5s all;
-  z-index: 2;
-}
-
-#trash-can:hover {
-  background-color: rgba(63, 63, 63, 0.4);
-  height: 150px;
-  width: 150px;
-  line-height: 150px;
 }
 
 control-keys {

@@ -166,9 +166,14 @@ view model =
   Html.div [ Attributes.id "audio-module-map" ]
   (List.concat [
     [ Html.div [Attributes.id "prototype-bank"]
-      (List.map (prototypeElement model.nextId) creatablePrototypes)
-    , Html.div [Attributes.id "trash-can"]
-      [Html.text "trash"]
+      (List.map
+        (viewPrototype model.nextId)
+        [ ( ConstantModule, "Const")
+        , ( VCOModule, "VCO")
+        , ( VCAModule, "VCA")
+        , ( EnvelopeModule, "Envelope")
+        ]
+      )
     , Svg.svg [Attributes.id "connection-map"]
       []
     ]
@@ -177,45 +182,108 @@ view model =
 
 viewAudioModules : Model -> List (Html.Html Msg)
 viewAudioModules model =
-  Dict.values model.audioModules
-  |> \list -> (
-    case model.draggedModule of
-      Nothing -> list
-      Just audioModule -> audioModule :: list
+  let list = Dict.values model.audioModules |> List.map (viewAudioModule False)
+  in case model.draggedModule of
+    Nothing -> list
+    Just audioModule -> (viewAudioModule True audioModule) :: list
+
+viewAudioModule : Bool -> AudioModule -> Html.Html Msg
+viewAudioModule dragging audioModule =
+  let
+    (x, y) = audioModule.position
+    attrs =
+      [ Attributes.style "left" ((String.fromInt (round x)) ++ "px")
+      , Attributes.style "top" ((String.fromInt (round y)) ++ "px")
+      , Attributes.style "position" "absolute"
+      , Draggable.mouseTrigger audioModule.id DragMsg
+      ]
+  in
+    viewGenericModule audioModule.type_
+    ( if dragging then Attributes.style "z-index" "1000" :: attrs
+      else attrs
     )
-  |> List.map audioModuleElement
+    []
 
-audioModuleElement : AudioModule -> Html.Html Msg
-audioModuleElement audioModule =
-  let (x, y) = audioModule.position
-  in Html.div
-    [ Attributes.class "module-wrapper"
-    , Attributes.class "grabbable"
-    , Attributes.style "left" ((String.fromInt (round x)) ++ "px")
-    , Attributes.style "top" ((String.fromInt (round y)) ++ "px")
-    , Draggable.mouseTrigger audioModule.id DragMsg
-    ]
-    [ ]
-
-creatablePrototypes : List (AudioModuleType, String)
-creatablePrototypes =
-  [ ( ConstantModule, "Const")
-  , ( VCOModule, "VCO")
-  , ( VCAModule, "VCA")
-  , ( EnvelopeModule, "Envelope")
-  ]
-
-prototypeElement : Id -> (AudioModuleType, String) -> Html.Html Msg
-prototypeElement nextId ( moduleType, name ) =
-  Html.div
-    [ Attributes.class "module-prototype"
-    , Attributes.class "grabbable"
-    , Draggable.customMouseTrigger
+viewPrototype : Id -> (AudioModuleType, String) -> Html.Html Msg
+viewPrototype nextId ( moduleType, name ) =
+  viewGenericModule moduleType
+    [ Draggable.customMouseTrigger
       nextId
       (mouseDownDecoder moduleType)
       CreateAndStartDrag
     ]
-    [ Html.text name ]
+    [ Html.div [ Attributes.class "prototype-click-shield"] [] ]
+
+viewGenericModule :
+  AudioModuleType
+  -> List (Html.Attribute Msg)
+  -> List (Html.Html Msg)
+  -> Html.Html Msg
+viewGenericModule moduleType extraAttributes extraElements  =
+  Html.div
+    ( List.concat [
+      [ Attributes.class "module-wrapper"
+      , Attributes.class "grabbable"
+      ]
+      , extraAttributes
+    ] )
+    ( List.concat [
+      [ Html.div [Attributes.class "endpoint-bank"] (endpointsInFor moduleType)
+      , Html.div [Attributes.class "control-bank"] []
+      , Html.div [Attributes.class "endpoint-bank"] (endpointsOutFor moduleType)
+      ]
+      , extraElements
+    ] )
+
+endpointsInFor : AudioModuleType -> List (Html.Html Msg)
+endpointsInFor audioModuleType =
+  case audioModuleType of
+    ControllerModule ->
+      []
+    DestinationModule ->
+      [ viewEndpoint "signal_in" ]
+    ConstantModule ->
+      []
+    VCOModule ->
+      [ viewEndpoint "freq_in"
+      , viewEndpoint "detune_in"
+      ]
+    VCAModule ->
+      [ viewEndpoint "signal_in"
+      , viewEndpoint "cv_in"
+      ]
+    EnvelopeModule ->
+      [ viewEndpoint "gate_in"
+      , viewEndpoint "trigger_in"
+      ]
+
+endpointsOutFor : AudioModuleType -> List (Html.Html Msg)
+endpointsOutFor audioModuleType =
+  case audioModuleType of
+    ControllerModule ->
+      [ viewEndpoint "freq_out"
+      , viewEndpoint "gate_out"
+      , viewEndpoint "trigger_out"
+      ]
+    DestinationModule ->
+      []
+    ConstantModule ->
+      [ viewEndpoint "cv_out" ]
+    VCOModule ->
+      [ viewEndpoint "signal_out" ]
+    VCAModule ->
+      [ viewEndpoint "signal_out" ]
+    EnvelopeModule ->
+      [ viewEndpoint "level_out" ]
+
+viewEndpoint : String -> Html.Html Msg
+viewEndpoint label =
+  Html.div [ Attributes.class "endpoint-wrapper" ]
+  [ Html.div
+    [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ] []
+  , Html.label
+    [ Attributes.class "endpoint-label" ] [ Html.text label ]
+  ]
 
 mouseDownDecoder : AudioModuleType -> Decode.Decoder CreateInfo
 mouseDownDecoder type_ =
@@ -226,4 +294,3 @@ mouseDownDecoder type_ =
     ( Decode.field "pageY" Decode.float)
   )
   |> Decode.map (\ci -> { clickInfo = ci, typeClicked = type_} )
-
