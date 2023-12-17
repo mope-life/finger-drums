@@ -146,97 +146,45 @@
     <div class="white key c-f" id=','><span>,</span></div>
     <div class="white key a-d-g" id='.'><span>.</span></div>
     <div class="white key b-e" id='/'><span>/</span></div>
-  </template>
+		</template>
 
-  <template id="knob-template">
-	<style>
-	  :host {
-		display: flex;
-	  }
-
-	  div.inputs {
-		display: flex;
-		flex-direction: column;
-		margin-right: 3px;
-	  }
-
-	  input {
-		color: var(--number-input-color);
-		background-color: var(--number-input-background-color);
-		font: var(--number-input-font);
-		width: var(--number-input-width);
-	  }
-
-	  label {
-		font: var(--label-font);
-		text-align: justify;
-		text-align-last: justify;
-	  }
-
-	  svg {
-		height: 88px;
-	  }
-
-	  /*Hide the arrows on inputs*/
- 	  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
-		-webkit-appearance: none;
-		margin: 0;
-	  }
-
-	  input[type=number] {
-		-moz-appearance: textfield;
-	  }
-	</style>
-	<div class="inputs">
-	  <label>
-		min:
-		<input type="number" data-attr="min">
-	  </label>
-	  <label>
-		max:
-		<input type="number" data-attr="max">
-	  </label>
-	  <label>
-		prec:
-		<input type="number" data-attr="prec">
-	  </label>
-	  <label>
-		value:
-		<input type="number" data-attr="value">
-	  </label>
-	</div>
-
-	<svg viewBox="-1 -1 2 2">
-	  <mask id="mask">
-		<rect x="-1" y="-1" width="2" height="2" fill="white">
-		</rect>
-		<circle cx="1.7" cy="0" r="0.8" fill="black">
-		</circle>
-		<circle cx="1.2020815280171309" cy="1.2020815280171306" r="0.8" fill="black">
-		</circle>
-		<circle cx="1.0409497792752501e-16" cy="1.7" r="0.8" fill="black">
-		</circle>
-		<circle cx="-1.2020815280171306" cy="1.2020815280171309" r="0.8" fill="black">
-		</circle>
-		<circle cx="-1.7" cy="2.0818995585505003e-16" r="0.8" fill="black">
-		</circle>
-		<circle cx="-1.202081528017131" cy="-1.2020815280171306" r="0.8" fill="black">
-		</circle>
-		<circle cx="-3.1228493378257504e-16" cy="-1.7" r="0.8" fill="black">
-		</circle>
-		<circle cx="1.2020815280171304" cy="-1.202081528017131" r="0.8" fill="black">
-		</circle>
-	  </mask>
-	  <g mask="url(#mask)">
-		<circle cx="0" cy="0" r="1" fill="black">
-		</circle>
-		<circle cx="0" cy="0" r="0.65" fill="#b0b0b8">
-		</circle>
-		<circle cx="-0.3138004145393736" cy="0.757581216659255" r="0.05" fill="white">
-		</circle>
-	  </g>
-	</svg>
-  </template>
-
-</body>
+		<template id="knob-template">
+			<style>
+			svg {
+				width: 100%;
+				height: 100%;
+			}
+			</style>
+			<svg viewBox="-1 -1 2 2">
+				<mask id="mask">
+					<rect x="-1" y="-1" width="2" height="2" fill="white">
+					</rect>
+					<circle cx="1.7" cy="0" r="0.8" fill="black">
+					</circle>
+					<circle cx="1.2020815280171309" cy="1.2020815280171306" r="0.8" fill="black">
+					</circle>
+					<circle cx="1.0409497792752501e-16" cy="1.7" r="0.8" fill="black">
+					</circle>
+					<circle cx="-1.2020815280171306" cy="1.2020815280171309" r="0.8" fill="black">
+					</circle>
+					<circle cx="-1.7" cy="2.0818995585505003e-16" r="0.8" fill="black">
+					</circle>
+					<circle cx="-1.202081528017131" cy="-1.2020815280171306" r="0.8" fill="black">
+					</circle>
+					<circle cx="-3.1228493378257504e-16" cy="-1.7" r="0.8" fill="black">
+					</circle>
+					<circle cx="1.2020815280171304" cy="-1.202081528017131" r="0.8" fill="black">
+					</circle>
+				</mask>
+				<g mask="url(#mask)">
+					<circle cx="0" cy="0" r="1" fill="black">
+					</circle>
+					<circle cx="0" cy="0" r="0.61" fill="#b0b0b8">
+					</circle>
+					<circle cx="-0.3138004145393736" cy="0.757581216659255" r="0.05" fill="white">
+					</circle>
+				</g>
+			</svg>
+		</templat>
+	</body>
 </html>

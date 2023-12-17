@@ -10,7 +10,6 @@ import Json.Decode as Decode
 import Draggable
 import Draggable.Events
 import Html.Attributes as Attributes
-import String exposing (cons)
 
 
 {- MAIN -}
@@ -318,7 +317,7 @@ controlsFor audioModuleType =
     DestinationModule ->
       []
     ConstantModule ->
-      [ { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) ( Knob )
+      [ { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) Knob
         , label = Nothing
       } ]
     VCOModule ->
@@ -330,16 +329,16 @@ controlsFor audioModuleType =
     VCAModule ->
       []
     EnvelopeModule ->
-      [ { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) (Field)
+      [ { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
         , label = Just "attack"
         }
-      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) (Field)
+      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
         , label = Just "decay"
         }
-      , { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) (Field)
+      , { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) Field
         , label = Just "sustain"
         }
-      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) (Field)
+      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
         , label = Just "release"
         }
       ]
@@ -373,15 +372,15 @@ innerHtmlForControl innerControl =
     Number value range input ->
       let
         commonAttrs =
-          [ Attributes.value (String.fromFloat value)
-          , Attributes.min (String.fromFloat range.min)
+          [ Attributes.min (String.fromFloat range.min)
           , Attributes.max (String.fromFloat range.max)
           , Attributes.step (String.fromFloat range.step)
+          , Attributes.value (String.fromFloat value)
           ]
       in
       case input of
         Knob ->
-          Html.node "control-knob" commonAttrs []
+          Html.node "knob-control" commonAttrs []
         Field ->
           Html.input (Attributes.type_ "number" :: commonAttrs) []
 

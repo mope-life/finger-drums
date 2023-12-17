@@ -157,7 +157,7 @@ control-keys {
   width: 300px;
 }
 
-control-knob {
+knob-control {
   padding: 1px;
   height: 8ch;
 }
