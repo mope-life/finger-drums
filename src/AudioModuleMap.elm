@@ -9,6 +9,8 @@ import Platform.Cmd as Cmd
 import Json.Decode as Decode
 import Draggable
 import Draggable.Events
+import Html.Attributes as Attributes
+import String exposing (cons)
 
 
 {- MAIN -}
@@ -58,6 +60,25 @@ type AudioModuleType
   | EnvelopeModule
 --| More to come!
 
+type alias Control =
+  { innerControl : InnerControl
+  , label : Maybe String
+  }
+
+type InnerControl
+  = Radio String String Bool
+  | Number Float Range NumericInput
+
+type alias Range =
+  { max : Float
+  , min : Float
+  , step : Float
+  }
+
+type NumericInput
+  = Knob
+  | Field
+
 type Msg
   = CreateAndStartDrag (Draggable.Msg Id) CreateInfo
   | OnDragStart Id
@@ -76,6 +97,7 @@ type alias CreateInfo =
   { clickInfo : ClickInfo
   , typeClicked : AudioModuleType
   }
+
 
 {- SUBSCRIPTIONS -}
 subscriptions : Model -> Sub Msg
@@ -160,6 +182,7 @@ dragConfig =
     , Draggable.Events.onDragEnd OnDragEnd
     ]
 
+
 {- VIEW -}
 view : Model -> Html.Html Msg
 view model =
@@ -194,12 +217,18 @@ viewAudioModule dragging audioModule =
     attrs =
       [ Attributes.style "left" ((String.fromInt (round x)) ++ "px")
       , Attributes.style "top" ((String.fromInt (round y)) ++ "px")
-      , Attributes.style "position" "absolute"
       , Draggable.mouseTrigger audioModule.id DragMsg
       ]
   in
     viewGenericModule audioModule.type_
-    ( if dragging then Attributes.style "z-index" "1000" :: attrs
+    ( if dragging
+      then
+        List.concat
+        [ [ Attributes.class "grabbing"
+          , Attributes.style "z-index" "1000"
+          ]
+          , attrs
+        ]
       else attrs
     )
     []
@@ -219,7 +248,7 @@ viewGenericModule :
   -> List (Html.Attribute Msg)
   -> List (Html.Html Msg)
   -> Html.Html Msg
-viewGenericModule moduleType extraAttributes extraElements  =
+viewGenericModule moduleType extraAttributes extraElements =
   Html.div
     ( List.concat [
       [ Attributes.class "module-wrapper"
@@ -227,13 +256,18 @@ viewGenericModule moduleType extraAttributes extraElements  =
       ]
       , extraAttributes
     ] )
-    ( List.concat [
-      [ Html.div [Attributes.class "endpoint-bank"] (endpointsInFor moduleType)
-      , Html.div [Attributes.class "control-bank"] []
-      , Html.div [Attributes.class "endpoint-bank"] (endpointsOutFor moduleType)
-      ]
-      , extraElements
-    ] )
+    ( let
+        inputs = endpointsInFor moduleType |> \ list -> if List.isEmpty list then [] else (Html.text "in:") :: list
+        outputs = endpointsOutFor moduleType |> \ list -> if List.isEmpty list then [] else (Html.text "out:") :: list
+      in
+        ( List.concat [
+          [ Html.div [Attributes.class "endpoint-bank", Attributes.class "inputs"] inputs
+          , Html.div [Attributes.class "control-bank"] (List.map htmlForControl (controlsFor moduleType))
+          , Html.div [Attributes.class "endpoint-bank", Attributes.class "outputs"] outputs
+          ]
+          , extraElements
+        ] )
+    )
 
 endpointsInFor : AudioModuleType -> List (Html.Html Msg)
 endpointsInFor audioModuleType =
@@ -241,48 +275,121 @@ endpointsInFor audioModuleType =
     ControllerModule ->
       []
     DestinationModule ->
-      [ viewEndpoint "signal_in" ]
+      [ viewEndpoint "signal" ]
     ConstantModule ->
       []
     VCOModule ->
-      [ viewEndpoint "freq_in"
-      , viewEndpoint "detune_in"
+      [ viewEndpoint "freq"
+      , viewEndpoint "detune"
       ]
     VCAModule ->
-      [ viewEndpoint "signal_in"
-      , viewEndpoint "cv_in"
+      [ viewEndpoint "signal"
+      , viewEndpoint "cv"
       ]
     EnvelopeModule ->
-      [ viewEndpoint "gate_in"
-      , viewEndpoint "trigger_in"
+      [ viewEndpoint "gate"
+      , viewEndpoint "trig"
       ]
 
 endpointsOutFor : AudioModuleType -> List (Html.Html Msg)
 endpointsOutFor audioModuleType =
   case audioModuleType of
     ControllerModule ->
-      [ viewEndpoint "freq_out"
-      , viewEndpoint "gate_out"
-      , viewEndpoint "trigger_out"
+      [ viewEndpoint "freq"
+      , viewEndpoint "gate"
+      , viewEndpoint "trig"
       ]
     DestinationModule ->
       []
     ConstantModule ->
-      [ viewEndpoint "cv_out" ]
+      [ viewEndpoint "cv" ]
     VCOModule ->
-      [ viewEndpoint "signal_out" ]
+      [ viewEndpoint "signal" ]
     VCAModule ->
-      [ viewEndpoint "signal_out" ]
+      [ viewEndpoint "signal" ]
     EnvelopeModule ->
-      [ viewEndpoint "level_out" ]
+      [ viewEndpoint "level" ]
+
+controlsFor : AudioModuleType -> List Control
+controlsFor audioModuleType =
+  case audioModuleType of
+    ControllerModule ->
+      []
+    DestinationModule ->
+      []
+    ConstantModule ->
+      [ { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) ( Knob )
+        , label = Nothing
+      } ]
+    VCOModule ->
+      [ { innerControl = Radio "osc-type" "sine" True, label = Just "sin" }
+      , { innerControl = Radio "osc-type" "square" False, label = Just "sqr" }
+      , { innerControl = Radio "osc-type" "sawtooth" False, label = Just "saw" }
+      , { innerControl = Radio "osc-type" "triangle" False, label = Just "tri" }
+      ]
+    VCAModule ->
+      []
+    EnvelopeModule ->
+      [ { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) (Field)
+        , label = Just "attack"
+        }
+      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) (Field)
+        , label = Just "decay"
+        }
+      , { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) (Field)
+        , label = Just "sustain"
+        }
+      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) (Field)
+        , label = Just "release"
+        }
+      ]
+
+inputRange : Maybe Float -> Maybe Float -> Float -> Range
+inputRange maybeMax maybeMin step =
+  { max = Maybe.withDefault 3.4028234663852886e38 maybeMax
+  , min = Maybe.withDefault -3.4028234663852886e38 maybeMin
+  , step = step
+  }
+
+htmlForControl : Control -> Html.Html Msg
+htmlForControl { innerControl, label } =
+  case label of
+    Nothing ->
+      innerHtmlForControl innerControl
+    Just string ->
+      Html.label [][ Html.text string, innerHtmlForControl innerControl ]
+
+innerHtmlForControl : InnerControl -> Html.Html Msg
+innerHtmlForControl innerControl =
+  case innerControl of
+    Radio name value checked ->
+      Html.input
+        [ Attributes.type_ "radio"
+        , Attributes.name name
+        , Attributes.value value
+        , Attributes.checked checked
+        ]
+        []
+    Number value range input ->
+      let
+        commonAttrs =
+          [ Attributes.value (String.fromFloat value)
+          , Attributes.min (String.fromFloat range.min)
+          , Attributes.max (String.fromFloat range.max)
+          , Attributes.step (String.fromFloat range.step)
+          ]
+      in
+      case input of
+        Knob ->
+          Html.node "control-knob" commonAttrs []
+        Field ->
+          Html.input (Attributes.type_ "number" :: commonAttrs) []
 
 viewEndpoint : String -> Html.Html Msg
 viewEndpoint label =
   Html.div [ Attributes.class "endpoint-wrapper" ]
-  [ Html.div
-    [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ] []
-  , Html.label
-    [ Attributes.class "endpoint-label" ] [ Html.text label ]
+  [ Html.div [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ] []
+  , Html.label [ Attributes.class "endpoint-label" ] [ Html.text label ]
   ]
 
 mouseDownDecoder : AudioModuleType -> Decode.Decoder CreateInfo

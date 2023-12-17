@@ -5,7 +5,7 @@
   --map-background: #141414;
   --module-background: #777;
   --module-border: 5px outset #999;
-  --label-font: 0.5em monospace;
+  --label-font: 1em monospace;
   --prototype-bank-background: #bfbfbf;
 
   --number-input-color: lime;
@@ -80,22 +80,13 @@ body {
 .module-wrapper {
   background: var(--module-background);
   border: var(--module-border);
-  padding: 8px 4px 8px 4px;
   display: flex;
   align-items: stretch;
 }
 
 #audio-module-map > .module-wrapper {
-  z-index: 100
-}
-
-.endpoint-label {
-  position: relative;
-  top: -5px;
-  font: var(--label-font);
-  display: inline-block;
-  line-height: 10px;
-  margin: 0;
+  position: absolute;
+  z-index: 100;
 }
 
 .endpoint-jack {
@@ -120,11 +111,26 @@ body {
 }
 
 .endpoint-bank {
+  font: var(--label-font);
   display: flex;
-  justify-content: center;
+  justify-content: top;
   align-items: stretch;
   flex-direction: column;
   flex-grow: 0;
+  box-sizing: content-box;
+}
+
+.endpoint-bank:nth-child(1 of .endpoint-bank):not(:empty) {
+  border-right: 2px inset #999;
+}
+
+.endpoint-bank:nth-child(2 of .endpoint-bank):not(:empty) {
+  border-left: 2px inset #999;
+}
+
+.endpoint-bank:not(:empty) {
+  padding: 0 2px;
+  width: 6ch;
 }
 
 .control-bank {
@@ -132,11 +138,10 @@ body {
   flex-direction: column;
   justify-content: center;
   flex-grow: 1;
-  padding: 0 2px;
 }
 
-.control-bank:empty {
-  padding: 0;
+.control-bank:not(:empty) {
+  padding-left: 2px;
 }
 
 .grabbable {
@@ -152,11 +157,17 @@ control-keys {
   width: 300px;
 }
 
+control-knob {
+  padding: 1px;
+  height: 8ch;
+}
+
 input[type=number] {
   color: var(--number-input-color);
   background-color: var(--number-input-background-color);
   font: var(--number-input-font);
   width: var(--number-input-width);
+  border-color: #999;
 
   /*Hide the arrows on inputs (polyfill)*/
   -moz-appearance: textfield;
@@ -168,13 +179,25 @@ input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
   margin: 0;
 }
 
-label.number-label {
+label {
   font: var(--label-font);
-  text-align: justify;
-  text-align-last: justify;
 }
 
-label.radio-label {
+.control-bank label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.control-bank label input {
+  margin-left: 5px;
+}
+
+.endpoint-bank label {
+  top: -5px;
+  position: relative;
   display: inline-block;
-  font: var(--label-font);
+  line-height: 10px;
+  margin: 0;
 }
