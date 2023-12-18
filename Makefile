@@ -1,4 +1,4 @@
-output:=scripts/elm.js	
+output:=scripts/elm.js
 srcdir:=src
 
 # is this a normal way to write a Makefile?
@@ -6,8 +6,9 @@ sources:=$(patsubst %,$(srcdir)/%,		\
 	AudioModuleMap.elm					\
 )
 
-# these would include .elm files that don't actually produce a Program
+# these include .elm files that don't actually produce a Program
 dependencies:=$(patsubst %,$(srcdir)/%,	\
+	AudioModule.elm						\
 )
 
 # also depend on this Makefile

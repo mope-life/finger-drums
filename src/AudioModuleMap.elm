@@ -10,9 +10,11 @@ import Json.Decode as Decode
 import Draggable
 import Draggable.Events
 import Html.Attributes as Attributes
+import AudioModule exposing (AudioModule)
+import AudioModule exposing (Position)
 
-
-{- MAIN -}
+--------------------------------------------------------------------------------
+-- Initialization --------------------------------------------------------------
 main : Program () Model Msg
 main =
   Browser.element
@@ -22,61 +24,31 @@ main =
     , subscriptions = subscriptions
     }
 
-
 init : () -> ( Model, Cmd Msg )
 init _ =
   ( { audioModules = Dict.empty
-    , draggedModule = Nothing
+    , draggedId = Nothing
+    , prototypes =
+      [ AudioModule.init AudioModule.ConstantModule |> AudioModule.asPrototype
+      , AudioModule.init AudioModule.VCOModule |> AudioModule.asPrototype
+      , AudioModule.init AudioModule.VCAModule |> AudioModule.asPrototype
+      , AudioModule.init AudioModule.EnvelopeModule |> AudioModule.asPrototype
+      ]
     , nextId = 0
     , drag = Draggable.init
-    } 
+    }
     , Cmd.none
   )
 
-
-{- MODEL -}
+--------------------------------------------------------------------------------
+-- Model -----------------------------------------------------------------------
 type alias Model =
   { audioModules : Dict Id AudioModule
-  , draggedModule : Maybe AudioModule
+  , prototypes : List AudioModule
+  , draggedId : Maybe Id
   , nextId : Id
   , drag : Draggable.State Id
   }
-
-type alias Id = Int
-
-type alias AudioModule =
-  { type_ : AudioModuleType
-  , id : Id
-  , position : (Float, Float)
-  }
-
-type AudioModuleType
-  = ControllerModule
-  | DestinationModule
-  | ConstantModule
-  | VCOModule
-  | VCAModule
-  | EnvelopeModule
---| More to come!
-
-type alias Control =
-  { innerControl : InnerControl
-  , label : Maybe String
-  }
-
-type InnerControl
-  = Radio String String Bool
-  | Number Float Range NumericInput
-
-type alias Range =
-  { max : Float
-  , min : Float
-  , step : Float
-  }
-
-type NumericInput
-  = Knob
-  | Field
 
 type Msg
   = CreateAndStartDrag (Draggable.Msg Id) CreateInfo
@@ -84,6 +56,14 @@ type Msg
   | OnDragEnd
   | OnDragBy Draggable.Delta
   | DragMsg (Draggable.Msg Id)
+  | AudioModuleMsg Id AudioModule.Msg
+
+type alias Id = Int
+
+type alias CreateInfo =
+  { type_ : AudioModule.Type
+  , position : AudioModule.Position
+  }
 
 type alias ClickInfo =
   { offsetX : Float
@@ -92,86 +72,89 @@ type alias ClickInfo =
   , pageY : Float
   }
 
-type alias CreateInfo =
-  { clickInfo : ClickInfo
-  , typeClicked : AudioModuleType
-  }
+with : Id -> AudioModule -> Model -> Model
+with id audioModule model =
+  { model | audioModules = model.audioModules |> Dict.insert id audioModule }
 
+without : Id -> Model -> Model
+without id model =
+  { model | audioModules = model.audioModules |> Dict.remove id }
 
-{- SUBSCRIPTIONS -}
+withDragged : Id -> Model -> Model
+withDragged id model =
+  { model | draggedId = Just id }
+
+withNothingDragged : Model -> Model
+withNothingDragged model =
+  { model | draggedId = Nothing }
+
+withNextId : Model -> Model
+withNextId model =
+  { model | nextId = model.nextId + 1 }
+
+mapAudioModule : (AudioModule -> AudioModule) -> Id -> Model -> Model
+mapAudioModule transform id model =
+  case (Dict.get id model.audioModules) of
+    Nothing ->
+      model
+    Just audioModule ->
+      with id (transform audioModule) model
+
+maybeMapAudioModule : (AudioModule -> AudioModule) -> Maybe Id -> Model -> Model
+maybeMapAudioModule transform maybeId model =
+  case maybeId of
+    Nothing ->
+      model
+    Just id ->
+      mapAudioModule transform id model
+
+--------------------------------------------------------------------------------
+-- Subscriptions ---------------------------------------------------------------
 subscriptions : Model -> Sub Msg
 subscriptions { drag } =
   Draggable.subscriptions DragMsg drag
 
-
-{- UPDATE -}
+--------------------------------------------------------------------------------
+-- Update ----------------------------------------------------------------------
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
-    CreateAndStartDrag dragMsg {clickInfo, typeClicked} ->
-      let newModule = createAudioModule typeClicked clickInfo model.nextId
-      in
-        Draggable.update
-        dragConfig
-        dragMsg
-        ( model
-          |> insertAudioModule newModule
-          |> \m -> { m | nextId = m.nextId + 1 }
-        )
-    OnDragStart id ->
-      (startDragging id model
-      , Cmd.none)
-    OnDragEnd ->
-      (endDragging model
-      , Cmd.none)
-    OnDragBy delta ->
-      (repositionDraggedModule delta model
-      , Cmd.none)
+    CreateAndStartDrag dragMsg createInfo ->
+      model
+      |> insertNewAudioModule createInfo
+      |> Draggable.update dragConfig dragMsg
     DragMsg dragMsg ->
       Draggable.update dragConfig dragMsg model
+    OnDragStart id ->
+      ( startDragging id model, Cmd.none )
+    OnDragEnd ->
+      ( endDragging model, Cmd.none )
+    OnDragBy delta ->
+      ( doDrag delta model, Cmd.none )
+    AudioModuleMsg id moduleMsg ->
+      ( mapAudioModule (AudioModule.update moduleMsg) id model, Cmd.none )
 
-repositionDraggedModule : Draggable.Delta -> Model -> Model
-repositionDraggedModule delta model =
-  { model 
-    | draggedModule = Maybe.map (repositionModule delta) model.draggedModule
-  }
-
-repositionModule : Draggable.Delta ->  AudioModule -> AudioModule
-repositionModule (deltaX, deltaY) audioModule =
-  let (x, y) = audioModule.position
-  in { audioModule | position = ( x + deltaX, y + deltaY ) }
+insertNewAudioModule : CreateInfo -> Model -> Model
+insertNewAudioModule { type_, position} model =
+  model
+  |> withNextId
+  |> ( AudioModule.init type_ |> AudioModule.at position |> with model.nextId )
 
 startDragging : Id -> Model -> Model
 startDragging id model =
-  { model
-    | draggedModule = Dict.get id model.audioModules
-    , audioModules = Dict.remove id model.audioModules
-  }
+  model
+  |> withDragged id
+  |> mapAudioModule AudioModule.dragging id
 
 endDragging : Model -> Model
 endDragging model =
-  case model.draggedModule of
-    Nothing -> model
-    Just audioModule ->
-      model
-      |> insertAudioModule audioModule
-      |> \m -> { m | draggedModule = Nothing }
+  model
+  |> withNothingDragged
+  |> maybeMapAudioModule AudioModule.notDragging model.draggedId
 
-insertAudioModule : AudioModule -> Model -> Model
-insertAudioModule audioModule model =
-  { model
-    | audioModules = Dict.insert audioModule.id audioModule model.audioModules
-  }
-
-createAudioModule : AudioModuleType -> ClickInfo -> Id -> AudioModule
-createAudioModule moduleType clickInfo id =
-  { type_ = moduleType
-  , id = id
-  , position =
-    ( clickInfo.pageX - clickInfo.offsetX
-    , clickInfo.pageY - clickInfo.offsetY
-    )
-  }
+doDrag : Draggable.Delta -> Model -> Model
+doDrag delta model =
+  maybeMapAudioModule (AudioModule.movedBy delta) model.draggedId model
 
 dragConfig : Draggable.Config Int Msg
 dragConfig =
@@ -181,222 +164,64 @@ dragConfig =
     , Draggable.Events.onDragEnd OnDragEnd
     ]
 
-
-{- VIEW -}
+--------------------------------------------------------------------------------
+-- View ------------------------------------------------------------------------
 view : Model -> Html.Html Msg
 view model =
-  Html.div [ Attributes.id "audio-module-map" ]
-  (List.concat [
-    [ Html.div [Attributes.id "prototype-bank"]
-      (List.map
-        (viewPrototype model.nextId)
-        [ ( ConstantModule, "Const")
-        , ( VCOModule, "VCO")
-        , ( VCAModule, "VCA")
-        , ( EnvelopeModule, "Envelope")
-        ]
-      )
-    , Svg.svg [Attributes.id "connection-map"]
-      []
-    ]
-    , viewAudioModules model
-  ] )
+  Html.div
+    [ Attributes.id "audio-module-map" ]
+    ( viewPrototypeBank model
+      :: viewConnectionMap model
+      :: viewAudioModules model
+    )
+
+viewPrototypeBank : Model -> Html.Html Msg
+viewPrototypeBank model =
+  let
+    mouseTrigger = \audioModule ->
+      Draggable.customMouseTrigger
+      model.nextId
+      (creationDecoder audioModule.type_)
+      CreateAndStartDrag
+    viewPrototype prototype =
+      AudioModule.viewBasic [mouseTrigger prototype] prototype
+  in
+    Html.div
+      [ Attributes.id "prototype-bank" ]
+      ( List.map viewPrototype model.prototypes)
+
+viewConnectionMap : Model -> Html.Html Msg
+viewConnectionMap _ =
+  Svg.svg [Attributes.id "connection-map"] []
 
 viewAudioModules : Model -> List (Html.Html Msg)
 viewAudioModules model =
-  let list = Dict.values model.audioModules |> List.map (viewAudioModule False)
-  in case model.draggedModule of
-    Nothing -> list
-    Just audioModule -> (viewAudioModule True audioModule) :: list
-
-viewAudioModule : Bool -> AudioModule -> Html.Html Msg
-viewAudioModule dragging audioModule =
   let
-    (x, y) = audioModule.position
-    attrs =
-      [ Attributes.style "left" ((String.fromInt (round x)) ++ "px")
-      , Attributes.style "top" ((String.fromInt (round y)) ++ "px")
-      , Draggable.mouseTrigger audioModule.id DragMsg
-      ]
+    mouseTrigger id =
+      Draggable.mouseTrigger id DragMsg
+    viewAudioModule (id, audioModule) =
+      AudioModule.view (AudioModuleMsg id) [mouseTrigger id] audioModule
   in
-    viewGenericModule audioModule.type_
-    ( if dragging
-      then
-        List.concat
-        [ [ Attributes.class "grabbing"
-          , Attributes.style "z-index" "1000"
-          ]
-          , attrs
-        ]
-      else attrs
+    model.audioModules |> Dict.toList |> List.map viewAudioModule
+
+creationDecoder : AudioModule.Type -> Decode.Decoder CreateInfo
+creationDecoder type_ =
+  Decode.map (CreateInfo type_) positionDecoder
+
+positionDecoder : Decode.Decoder Position
+positionDecoder =
+  Decode.map
+    ( \clickInfo ->
+        ( clickInfo.pageX - clickInfo.offsetX
+        , clickInfo.pageY - clickInfo.offsetY
+        )
     )
-    []
+    mouseDownDecoder
 
-viewPrototype : Id -> (AudioModuleType, String) -> Html.Html Msg
-viewPrototype nextId ( moduleType, name ) =
-  viewGenericModule moduleType
-    [ Draggable.customMouseTrigger
-      nextId
-      (mouseDownDecoder moduleType)
-      CreateAndStartDrag
-    ]
-    [ Html.div [ Attributes.class "prototype-click-shield"] [] ]
-
-viewGenericModule :
-  AudioModuleType
-  -> List (Html.Attribute Msg)
-  -> List (Html.Html Msg)
-  -> Html.Html Msg
-viewGenericModule moduleType extraAttributes extraElements =
-  Html.div
-    ( List.concat [
-      [ Attributes.class "module-wrapper"
-      , Attributes.class "grabbable"
-      ]
-      , extraAttributes
-    ] )
-    ( let
-        inputs = endpointsInFor moduleType |> \ list -> if List.isEmpty list then [] else (Html.text "in:") :: list
-        outputs = endpointsOutFor moduleType |> \ list -> if List.isEmpty list then [] else (Html.text "out:") :: list
-      in
-        ( List.concat [
-          [ Html.div [Attributes.class "endpoint-bank", Attributes.class "inputs"] inputs
-          , Html.div [Attributes.class "control-bank"] (List.map htmlForControl (controlsFor moduleType))
-          , Html.div [Attributes.class "endpoint-bank", Attributes.class "outputs"] outputs
-          ]
-          , extraElements
-        ] )
-    )
-
-endpointsInFor : AudioModuleType -> List (Html.Html Msg)
-endpointsInFor audioModuleType =
-  case audioModuleType of
-    ControllerModule ->
-      []
-    DestinationModule ->
-      [ viewEndpoint "signal" ]
-    ConstantModule ->
-      []
-    VCOModule ->
-      [ viewEndpoint "freq"
-      , viewEndpoint "detune"
-      ]
-    VCAModule ->
-      [ viewEndpoint "signal"
-      , viewEndpoint "cv"
-      ]
-    EnvelopeModule ->
-      [ viewEndpoint "gate"
-      , viewEndpoint "trig"
-      ]
-
-endpointsOutFor : AudioModuleType -> List (Html.Html Msg)
-endpointsOutFor audioModuleType =
-  case audioModuleType of
-    ControllerModule ->
-      [ viewEndpoint "freq"
-      , viewEndpoint "gate"
-      , viewEndpoint "trig"
-      ]
-    DestinationModule ->
-      []
-    ConstantModule ->
-      [ viewEndpoint "cv" ]
-    VCOModule ->
-      [ viewEndpoint "signal" ]
-    VCAModule ->
-      [ viewEndpoint "signal" ]
-    EnvelopeModule ->
-      [ viewEndpoint "level" ]
-
-controlsFor : AudioModuleType -> List Control
-controlsFor audioModuleType =
-  case audioModuleType of
-    ControllerModule ->
-      []
-    DestinationModule ->
-      []
-    ConstantModule ->
-      [ { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) Knob
-        , label = Nothing
-      } ]
-    VCOModule ->
-      [ { innerControl = Radio "osc-type" "sine" True, label = Just "sin" }
-      , { innerControl = Radio "osc-type" "square" False, label = Just "sqr" }
-      , { innerControl = Radio "osc-type" "sawtooth" False, label = Just "saw" }
-      , { innerControl = Radio "osc-type" "triangle" False, label = Just "tri" }
-      ]
-    VCAModule ->
-      []
-    EnvelopeModule ->
-      [ { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
-        , label = Just "attack"
-        }
-      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
-        , label = Just "decay"
-        }
-      , { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) Field
-        , label = Just "sustain"
-        }
-      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
-        , label = Just "release"
-        }
-      ]
-
-inputRange : Maybe Float -> Maybe Float -> Float -> Range
-inputRange maybeMax maybeMin step =
-  { max = Maybe.withDefault 3.4028234663852886e38 maybeMax
-  , min = Maybe.withDefault -3.4028234663852886e38 maybeMin
-  , step = step
-  }
-
-htmlForControl : Control -> Html.Html Msg
-htmlForControl { innerControl, label } =
-  case label of
-    Nothing ->
-      innerHtmlForControl innerControl
-    Just string ->
-      Html.label [][ Html.text string, innerHtmlForControl innerControl ]
-
-innerHtmlForControl : InnerControl -> Html.Html Msg
-innerHtmlForControl innerControl =
-  case innerControl of
-    Radio name value checked ->
-      Html.input
-        [ Attributes.type_ "radio"
-        , Attributes.name name
-        , Attributes.value value
-        , Attributes.checked checked
-        ]
-        []
-    Number value range input ->
-      let
-        commonAttrs =
-          [ Attributes.min (String.fromFloat range.min)
-          , Attributes.max (String.fromFloat range.max)
-          , Attributes.step (String.fromFloat range.step)
-          , Attributes.value (String.fromFloat value)
-          ]
-      in
-      case input of
-        Knob ->
-          Html.node "knob-control" commonAttrs []
-        Field ->
-          Html.input (Attributes.type_ "number" :: commonAttrs) []
-
-viewEndpoint : String -> Html.Html Msg
-viewEndpoint label =
-  Html.div [ Attributes.class "endpoint-wrapper" ]
-  [ Html.div [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ] []
-  , Html.label [ Attributes.class "endpoint-label" ] [ Html.text label ]
-  ]
-
-mouseDownDecoder : AudioModuleType -> Decode.Decoder CreateInfo
-mouseDownDecoder type_ =
-  (Decode.map4 ClickInfo
+mouseDownDecoder : Decode.Decoder ClickInfo
+mouseDownDecoder =
+  Decode.map4 ClickInfo
     ( Decode.field "offsetX" Decode.float)
     ( Decode.field "offsetY" Decode.float)
     ( Decode.field "pageX" Decode.float)
     ( Decode.field "pageY" Decode.float)
-  )
-  |> Decode.map (\ci -> { clickInfo = ci, typeClicked = type_} )

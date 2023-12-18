@@ -82,11 +82,16 @@ body {
   border: var(--module-border);
   display: flex;
   align-items: stretch;
+  cursor: grab;
 }
 
 #audio-module-map > .module-wrapper {
   position: absolute;
-  z-index: 100;
+}
+
+.module-wrapper.dragging {
+  cursor: grabbing;
+  z-index: 10;
 }
 
 .endpoint-jack {
