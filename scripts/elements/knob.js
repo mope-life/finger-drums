@@ -10,257 +10,305 @@ class KnobControl extends HTMLElement {
         this._g.addEventListener("pointerdown", this);
         this._g.addEventListener("wheel", this);
 
-        this._currentRotation = 0;
-        this._rotationMax = 0;
-        this._rotationMin = -1.75 * Math.PI;
+        // beware that angles increase in the counter-clockwise direction, while
+        // the 'value' of the knob naturally increases in the clockwise
+        // direction
+        this._knobAngleMax = 0;
+        this._knobAngleMin = -1.75 * Math.PI;
+
+        // helper for wheel handler
+        this._scrollOvershoot = 0;
+
+        // for memoizing transform on the svg element
+        this._currentTransform = null;
+
+        this._value = 0;
+        this._max = 1;
+        this._min = 0;
+        this._intervals = "none";
     }
 
     static get observedAttributes() {
-        return ["min", "max", "step", "value"];
+        return ["min", "max", "intervals"];
     }
 
-    connectedCallback() {}
-    disconnectedCallback() {}
-    adoptedCallback() {}
-
-    attributeChangedCallback(name, oldv, newv) {
-        if (oldv != newv) {
-            this._changedCallbacks[name](newv);
+    connectedCallback() {
+        if (this.hasAttribute("value")) {
+            this.value = this.getAttribute("value");
+        }
+        else {
+            // ensure that value is valid for current parameters
+            this.value = this._value;
         }
     }
 
-    _changedCallbacks = {
-        "min": this._minChanged.bind(this),
-        "max": this._maxChanged.bind(this),
-        "step": this._stepChanged.bind(this),
-        "value": this._valueChanged.bind(this)
+    disconnectedCallback() { }
+    adoptedCallback() { }
+
+    attributeChangedCallback(name, oldv, newv) {
+        if (newv === null || oldv === newv) {
+            // no-op
+        }
+        else {
+            switch (name) {
+                case "min":
+                    this._minChanged(newv);
+                    break;
+                case "max":
+                    this._maxChanged(newv);
+                    break;
+                case "intervals":
+                    this._intervalsChanged(newv);
+                    break;
+            }
+
+            // force a recomputation of value with new parameters
+            this.value = this._value;
+        }
     }
 
     _minChanged(newv) {
-        const fixed = this._applyStep(newv);
-        if (fixed != newv) {
-            this.min = fixed;
-        }
-        else {
-            if (fixed >= this.max) {
-                this.max = fixed;
-            }
-            if (fixed > this.value) {
-                this.value = fixed;
+        const n = +newv;
+        if (!isNaN(n)) {
+            this._min = n;
+            if (n > this._max) {
+                this._max = n;
             }
         }
     }
 
     _maxChanged(newv) {
-        const fixed = this._applyStep(newv);
-        if (fixed != newv) {
-            this.max = fixed;
-        }
-        else {
-            if (fixed <= this.min) {
-                this.min = fixed;
-            }
-            if (fixed < this.value) {
-                this.value = fixed;
+        const n = +newv;
+        if (!isNaN(n)) {
+            this._max = n;
+            if (n < this._min) {
+                this._min = n;
             }
         }
     }
 
-    _stepChanged(newv) {
-        if (newv < 0) {
-            this.step = 0;
-        }
+    _intervalsChanged(newv) {
+        if (newv === "none")
+            this._intervals = "none";
         else {
-            // a different step might have caused any of these to change
-            this.min = this.min;
-            this.max = this.max;
-            this.value = this.value;
+            const n = +newv;
+            if (!isNaN(n)) {
+                this._intervals = newv < 1 ? 1 : newv;
+            }
         }
-    }
-
-    _valueChanged(newv) {
-        const clamped = newv < this.min ? this.min
-            : (newv > this.max ? this.max
-                : newv);
-        const fixed = this._applyStep(clamped)
-
-        if (fixed != newv) {
-            this.value = fixed;
-        }
-        else {
-            this._currentRotation = this._rotationFromValue(this.value);
-            this._setTransform();
-
-            this.dispatchEvent(new CustomEvent(
-                'input', {
-                bubbles: true,
-                cancelable: true,
-                detail: this.value
-            }));
-        }
-    }
-
-    _applyStep(n) {
-        return Math.round(n / this.step) * this.step;
     }
 
     handleEvent(e) {
-        if (e.type === "pointerdown") this._handlePointerDown(e);
-        else if (e.type === "wheel") this._handleWheel(e);
+        if (e.type === "pointerdown") {
+            this._handlePointerDown(e);
+        }
+        else if (e.type === "wheel") {
+            this._handleWheel(e);
+        }
     }
 
-    _handlePointerDown(e1) {
-        let target = this;
+    _handlePointerDown(e0) {
         let canceled = false;
-        target.style.cursor = "grabbing";
 
-        let callback = function (e2, lastAngle) {
-            e2.preventDefault();
-            e2.stopPropagation();
+        let callback = function (e1, v0, thetaPrev, deltaTheta) {
+            e1.preventDefault();
+            e1.stopPropagation();
 
-            let thisAngle = target._cursorAngle(e2.clientX, e2.clientY);
-            let offset = thisAngle - lastAngle;
+            const theta = this._cursorAngle(e1.clientX, e1.clientY);
 
-            // We crossed negative x axis going counterclockwise
-            if (lastAngle > 0.5*Math.PI && thisAngle < -0.5*Math.PI) {
-                offset += 2*Math.PI;
-            }
-            // We crossed the negative x axis going clockwise
-            else if (lastAngle < -0.5*Math.PI && thisAngle > 0.5*Math.PI) {
-                offset -= 2*Math.PI;
-            }
+            // total the pending cumulative delta with the new one...
+            // this is all well and good until the user starts "winding" around
+            // after reaching the minimum or maximum knob angles; we get around
+            // that by clamping the total
+            const deltaThetaNext = this._clamp(
+                deltaTheta + this._getCursorDelta(theta, thetaPrev),
+                this._angleDeltaFromValueDelta(this._max - v0),
+                this._angleDeltaFromValueDelta(this._min - v0)
+            );
 
-            const rotation = target._rotationFromOffset(offset);
-            const newValue = target._valueFromRotation(rotation);
-            const fixedValue = target._applyStep(newValue);
-
-            // We haven't moved far enough to trigger a change at current step
-            if (fixedValue == target.value) {
-                thisAngle = lastAngle;
-            }
-            // Update the value from the new rotation
-            else {
-                target.value = fixedValue;
-                const overshoot =
-                    target._rotationFromValue(fixedValue)
-                    - target._rotationFromValue(newValue);
-                thisAngle += overshoot;
-            }
+            // convert angle delta to a value delta and apply
+            const deltaV = this._valueDeltaFromAngleDelta(deltaThetaNext);
+            this.value = v0 + deltaV;
 
             if (!canceled) {
                 document.addEventListener(
                     'pointermove',
-                    e3 => requestAnimationFrame(_ => callback(e3, thisAngle)),
+                    e2 => requestAnimationFrame(_ =>
+                        callback.apply(this,
+                            [e2, v0, theta, deltaThetaNext]
+                        )
+                    ),
                     { once: true }
                 );
             }
-            else {
-                target.style.cursor = "";
-            }
         };
 
-        document.addEventListener(
-            'pointerup', () => canceled = true, {once: true}
+        document.addEventListener('pointerup', () =>
+            canceled = true,
+            { once: true }
         );
-
-        callback(e1, target._cursorAngle(e1.clientX, e1.clientY));
+        const theta0 = this._cursorAngle(e0.clientX, e0.clientY);
+        callback.apply(this, [e0, this.value, theta0, 0]);
     }
 
     _handleWheel(e) {
         e.stopPropagation();
-        const sign = e.deltaY > 0 ? 1 : -1;
-        const offset = sign
-            * this.step
-            * (this._rotationMax - this._rotationMin)
-            / (this.max - this.min);
-        const rotation = this._rotationFromOffset(offset);
-        const newValue = this._valueFromRotation(rotation);
-        this.value = newValue;
-    }
-
-    _rotationFromOffset(offset) {
-        // We're going counterclockwise and passed the maximum
-        if (offset > 0 && this._currentRotation > this._rotationMax) {
-            // lock at this point until we go back up
-            return this._rotationMax;
-        }
-        // We're going clockwise and passed the minimum
-        else if (offset < 0 && this._currentRotation < this._rotationMin) {
-            // lock at this point until we go back down
-            return this._rotationMin;
+        e.preventDefault();
+        if (this._max === this._min) {
+            this.value = this._min;
         }
         else {
-            return this._currentRotation + offset;
+            clearTimeout(this._timeoutId);
+
+            // determined experimentally for a good "feel"
+            const sensitivity = 1 / 60;
+
+            // we normalize on knob angle to get consistent visual change
+            // regardless of range
+            const deltaTheta = -e.deltaY * sensitivity;
+            const deltaV = this._valueDeltaFromAngleDelta(deltaTheta);
+            const newValue = this.value + deltaV + this._scrollOvershoot;
+            this.value = newValue;
+
+            // if our scroll didn't result in a full click (when intervals is
+            // set), we reserve the unused movement for a moment; otherwise,
+            // large intervals could only be overcome in a single wheel event,
+            // possibly necessitating a very vigorous scroll
+            this._scrollOvershoot = newValue - this.value;
+
+            // if we already hit the bounds, don't keep the overshoot
+            if (this.value === this._max && this._scrollOvershoot > 0) {
+                this._scrollOvershoot = 0;
+            }
+            else if (this.value === this._min && this._scrollOvershoot < 0) {
+                this._scrollOvershoot = 0;
+            }
+            else {
+                this._timeoutId = setTimeout(() => {
+                    this._scrollOvershoot = 0;
+                }, 0.2 * 1000
+                );
+            }
         }
     }
 
-    _valueFromRotation(rotation) {
-        const min = this.min;
-        const max = this.max;
+    _getCursorDelta(theta, thetaPrev) {
+        const halfPi = Math.PI / 2;
 
-        const amt =
-            (rotation - this._rotationMax)
-            / (this._rotationMin - this._rotationMax);
-
-        const newValue = min + amt * (max - min);
-        if (newValue < min) {
-            return min;
+        // we crossed the negative x-axis while going clockwise
+        if (thetaPrev < -halfPi && theta > halfPi) {
+            return theta - thetaPrev - 2 * Math.PI;
         }
-        else if (newValue > max) {
-            return max;
+        // we crossed the negative x-axis while going counter-clockwise
+        else if (thetaPrev > halfPi && theta < -halfPi) {
+            return theta - thetaPrev + 2 * Math.PI;
         }
         else {
-            return newValue;
+            return theta - thetaPrev;
         }
     }
 
-    _rotationFromValue(value) {
-        const min = this.min;
-        const max = this.max;
-        const amt = (value - min) / (max - min);
-        return this._rotationMax
-            + amt * (this._rotationMin - this._rotationMax);
+    _angleDeltaFromValueDelta(value) {
+        return this._max === this._min ? 0 :
+        value
+            * (this._knobAngleMin - this._knobAngleMax)
+            / (this._max - this._min);
     }
 
-    _setTransform() {
-        const degrees = this._currentRotation * -180 / Math.PI;
-        this._g.setAttribute("transform", "rotate("+ degrees +")");
+    _valueDeltaFromAngleDelta(theta) {
+        return theta
+            * (this._max - this._min)
+            / (this._knobAngleMin - this._knobAngleMax);
     }
 
     _cursorAngle(xPos, yPos) {
         const rect = this._g.getBoundingClientRect();
         return Math.atan2(
             (rect.top + rect.bottom) / 2 - yPos,
-            xPos - (rect.left+rect.right) / 2
+            xPos - (rect.left + rect.right) / 2
         );
     }
 
-    get min() {
-        return this.hasAttribute("min") ? +this.getAttribute("min") : 0;
+    _clamp(x, min, max) {
+        if (x < min) return min
+        else if (x > max) return max;
+        else return x;
     }
+
+    _applyStep(value) {
+        if (this._intervals === "none") {
+            return value;
+        }
+        else {
+            const range = this._max - this._min;
+            if (range === 0) {
+                return this._min;
+            }
+            const step = range / this._intervals;
+            return Math.round((value - this._min) / step) * step + this._min;
+        }
+    }
+
+    _setTransform(value) {
+        const knobAngle = (this._min === this._max) ? 0 :
+            this._knobAngleMax
+            - this._angleDeltaFromValueDelta(value - this._min);
+
+        if (knobAngle != this._currentTransform) {
+            this._currentTransform = knobAngle;
+            const degrees = knobAngle * 180 / Math.PI;
+            this._g.setAttribute("transform", `rotate(${degrees})`);
+        }
+    }
+
+    set value(newv) {
+        const clamped = this._clamp(newv, this._min, this._max);
+        const fixed = this._applyStep(clamped);
+
+        // we always call setTransform, because sometimes we need to update the
+        // knob rotation regardless of whether the value has changed
+        this._setTransform(fixed);
+
+        if (fixed === this._value) {
+            return;
+        }
+        else {
+            this._value = fixed;
+            this.dispatchEvent(new CustomEvent(
+                'input', {
+                bubbles: true,
+                cancelable: true,
+                detail: fixed
+            }));
+        }
+    }
+
+    get value() {
+        return this._value;
+    }
+
+    get min() {
+        return this.hasAttribute("min") ? this.getAttribute("min") : "";
+    }
+
     set min(newv) {
         this.setAttribute("min", newv);
     }
 
     get max() {
-        return this.hasAttribute("max") ? +this.getAttribute("max") : 1;
+        return this.hasAttribute("max") ? this.getAttribute("max") : "";
     }
+
     set max(newv) {
         this.setAttribute("max", newv);
     }
 
-    get step() {
-        return this.hasAttribute("step") ? +this.getAttribute("step") : 0.001;
-    }
-    set step(newv) {
-        this.setAttribute("step", newv);
+    get intervals() {
+        return this.hasAttribute("intervals") ? this.getAttribute("intervals") : "";
     }
 
-    get value() {
-        return this.hasAttribute("value") ? +this.getAttribute("value") : 0;
-    }
-    set value(newv) {
-        this.setAttribute("value", newv);
+    set intervals(newv) {
+        this.setAttribute("intervals", newv);
     }
 }
 
