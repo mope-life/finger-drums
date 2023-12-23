@@ -11,7 +11,6 @@ import Draggable
 import Draggable.Events
 import Html.Attributes as Attributes
 import AudioModule exposing (AudioModule)
-import AudioModule exposing (Position)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -27,13 +26,13 @@ main =
 init : () -> ( Model, Cmd Msg )
 init _ =
   ( { audioModules = Dict.empty
-    , draggedId = Nothing
     , prototypes =
-      [ AudioModule.init AudioModule.ConstantModule |> AudioModule.asPrototype
-      , AudioModule.init AudioModule.VCOModule |> AudioModule.asPrototype
-      , AudioModule.init AudioModule.VCAModule |> AudioModule.asPrototype
-      , AudioModule.init AudioModule.EnvelopeModule |> AudioModule.asPrototype
+      [ AudioModule.initPrototype AudioModule.ConstantModule
+      , AudioModule.initPrototype AudioModule.VCOModule
+      , AudioModule.initPrototype AudioModule.VCAModule
+      , AudioModule.initPrototype AudioModule.EnvelopeModule
       ]
+    , draggedId = Nothing
     , nextId = 0
     , drag = Draggable.init
     }
@@ -44,33 +43,21 @@ init _ =
 -- Model -----------------------------------------------------------------------
 type alias Model =
   { audioModules : Dict Id AudioModule
-  , prototypes : List AudioModule
   , draggedId : Maybe Id
+  , prototypes : List AudioModule.Prototype
   , nextId : Id
   , drag : Draggable.State Id
   }
 
 type Msg
-  = CreateAndStartDrag (Draggable.Msg Id) CreateInfo
+  = CreateAndStartDrag AudioModule.Type (Draggable.Msg Id) AudioModule.Position
   | OnDragStart Id
   | OnDragEnd
   | OnDragBy Draggable.Delta
   | DragMsg (Draggable.Msg Id)
-  | AudioModuleMsg Id AudioModule.Msg
+  | Delegate Id AudioModule.Msg
 
 type alias Id = Int
-
-type alias CreateInfo =
-  { type_ : AudioModule.Type
-  , position : AudioModule.Position
-  }
-
-type alias ClickInfo =
-  { offsetX : Float
-  , offsetY : Float
-  , pageX : Float
-  , pageY : Float
-  }
 
 with : Id -> AudioModule -> Model -> Model
 with id audioModule model =
@@ -108,6 +95,21 @@ maybeMapAudioModule transform maybeId model =
     Just id ->
       mapAudioModule transform id model
 
+mapAudioModuleWithCmd :
+  (AudioModule -> (AudioModule, Cmd msg))
+  -> Id
+  -> Model
+  -> (Model, Cmd msg)
+mapAudioModuleWithCmd transform id model =
+  case (Dict.get id model.audioModules) of
+    Nothing ->
+      (model, Cmd.none)
+    Just audioModule ->
+      let
+        (am, cmd) = transform audioModule
+      in
+        (with id am model, cmd)
+
 --------------------------------------------------------------------------------
 -- Subscriptions ---------------------------------------------------------------
 subscriptions : Model -> Sub Msg
@@ -119,42 +121,34 @@ subscriptions { drag } =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
-    CreateAndStartDrag dragMsg createInfo ->
+    CreateAndStartDrag type_ dragMsg position ->
       model
-      |> insertNewAudioModule createInfo
+      |> insertNewAudioModule type_ position
       |> Draggable.update dragConfig dragMsg
     DragMsg dragMsg ->
       Draggable.update dragConfig dragMsg model
     OnDragStart id ->
-      ( startDragging id model, Cmd.none )
+      ( withDragged id model, Cmd.none )
     OnDragEnd ->
-      ( endDragging model, Cmd.none )
+      ( withNothingDragged model, Cmd.none )
     OnDragBy delta ->
       ( doDrag delta model, Cmd.none )
-    AudioModuleMsg id moduleMsg ->
-      ( mapAudioModule (AudioModule.update moduleMsg) id model, Cmd.none )
+    Delegate id moduleMsg ->
+      mapAudioModuleWithCmd
+        (AudioModule.update (Delegate id) moduleMsg) id model
 
-insertNewAudioModule : CreateInfo -> Model -> Model
-insertNewAudioModule { type_, position} model =
+insertNewAudioModule : AudioModule.Type -> AudioModule.Position -> Model -> Model
+insertNewAudioModule type_ position model =
   model
   |> withNextId
-  |> ( AudioModule.init type_ |> AudioModule.at position |> with model.nextId )
-
-startDragging : Id -> Model -> Model
-startDragging id model =
-  model
-  |> withDragged id
-  |> mapAudioModule AudioModule.dragging id
-
-endDragging : Model -> Model
-endDragging model =
-  model
-  |> withNothingDragged
-  |> maybeMapAudioModule AudioModule.notDragging model.draggedId
+  |>( AudioModule.init type_ (String.fromInt model.nextId)
+    |> AudioModule.at position
+    |> with model.nextId
+    )
 
 doDrag : Draggable.Delta -> Model -> Model
 doDrag delta model =
-  maybeMapAudioModule (AudioModule.movedBy delta) model.draggedId model
+  maybeMapAudioModule (AudioModule.translated delta) model.draggedId model
 
 dragConfig : Draggable.Config Int Msg
 dragConfig =
@@ -177,18 +171,15 @@ view model =
 
 viewPrototypeBank : Model -> Html.Html Msg
 viewPrototypeBank model =
-  let
-    mouseTrigger = \audioModule ->
-      Draggable.customMouseTrigger
-      model.nextId
-      (creationDecoder audioModule.type_)
-      CreateAndStartDrag
-    viewPrototype prototype =
-      AudioModule.viewBasic [mouseTrigger prototype] prototype
-  in
-    Html.div
-      [ Attributes.id "prototype-bank" ]
-      ( List.map viewPrototype model.prototypes)
+  Html.div
+    [ Attributes.id "prototype-bank" ]
+    ( List.map
+      (\proto -> AudioModule.viewPrototype
+        [prototypeDragTrigger model.nextId proto.type_]
+        proto
+      )
+      model.prototypes
+    )
 
 viewConnectionMap : Model -> Html.Html Msg
 viewConnectionMap _ =
@@ -197,18 +188,33 @@ viewConnectionMap _ =
 viewAudioModules : Model -> List (Html.Html Msg)
 viewAudioModules model =
   let
-    mouseTrigger id =
-      Draggable.mouseTrigger id DragMsg
-    viewAudioModule (id, audioModule) =
-      AudioModule.view (AudioModuleMsg id) [mouseTrigger id] audioModule
+    extraAttributes id =
+      (audioModuleDragTrigger id) ::
+        if audioModuleIsDragged id model
+        then [Attributes.class "dragging"]
+        else []
+    viewModule (id, audioModule) =
+      AudioModule.view (Delegate id) (extraAttributes id) audioModule
   in
-    model.audioModules |> Dict.toList |> List.map viewAudioModule
+    model.audioModules |> Dict.toList |> List.map viewModule
 
-creationDecoder : AudioModule.Type -> Decode.Decoder CreateInfo
-creationDecoder type_ =
-  Decode.map (CreateInfo type_) positionDecoder
+prototypeDragTrigger : Id -> AudioModule.Type -> Html.Attribute Msg
+prototypeDragTrigger id type_ =
+  Draggable.customMouseTrigger id positionDecoder (CreateAndStartDrag type_)
 
-positionDecoder : Decode.Decoder Position
+audioModuleDragTrigger : Id -> Html.Attribute Msg
+audioModuleDragTrigger id =
+  Draggable.mouseTrigger id DragMsg
+
+audioModuleIsDragged : Id -> Model -> Bool
+audioModuleIsDragged id model =
+  case Maybe.map (\i -> i == id) model.draggedId of
+    Nothing ->
+      False
+    Just bool ->
+      bool
+
+positionDecoder : Decode.Decoder AudioModule.Position
 positionDecoder =
   Decode.map
     ( \clickInfo ->
@@ -225,3 +231,10 @@ mouseDownDecoder =
     ( Decode.field "offsetY" Decode.float)
     ( Decode.field "pageX" Decode.float)
     ( Decode.field "pageY" Decode.float)
+
+type alias ClickInfo =
+  { offsetX : Float
+  , offsetY : Float
+  , pageX : Float
+  , pageY : Float
+  }

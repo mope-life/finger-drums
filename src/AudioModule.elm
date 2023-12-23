@@ -1,43 +1,89 @@
 module AudioModule exposing
   ( AudioModule
+  , Prototype
   , Msg
   , Type(..)
   , Position
   , init
+  , initPrototype
   , at
-  , movedBy
-  , dragging
-  , notDragging
-  , asPrototype
+  , translated
   , update
   , view
-  , viewBasic
+  , viewPrototype
   )
 
 import Html
 import Html.Attributes as Attributes
 import Html.Events as Events
+import AudioModule.Control as Control
+import Array exposing (Array)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-init : Type -> AudioModule
-init type_ =
-  { type_ = type_
+init : Type -> String -> AudioModule
+init type_ name =
+  { type_  = type_
   , position = (0, 0)
-  , isDragging = False
-  , isPrototype = False
+  , name = name
+  , controls = initControls type_ name
   }
+
+initPrototype : Type -> Prototype
+initPrototype type_ =
+  { type_ = type_
+  , controls = initControls type_ "proto"
+  }
+
+initControls : Type -> String -> Array Control.Control
+initControls type_ name =
+  case type_ of
+    ControllerModule ->
+      Array.empty
+    DestinationModule ->
+      Array.empty
+    ConstantModule ->
+      Array.fromList
+        [ Control.knobControl ]
+    VCOModule ->
+      Array.fromList
+        [ Control.radioControl ("osc-" ++ name) "sine"
+          |> Control.labeled "sin"
+          |> Control.checked
+        , Control.radioControl ("osc-" ++ name) "square"
+          |> Control.labeled "sqr"
+        , Control.radioControl ("osc-" ++ name) "sawtooth"
+          |> Control.labeled "saw"
+        , Control.radioControl ("osc-" ++ name) "triangle"
+          |> Control.labeled "tri"
+        ]
+    VCAModule ->
+      Array.empty
+    EnvelopeModule ->
+      Array.fromList
+        [ Control.numberControl |> Control.labeled "A"
+        , Control.numberControl |> Control.labeled "D"
+        , Control.numberControl |> Control.labeled "S"
+        , Control.numberControl |> Control.labeled "R"
+        ]
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
 type alias AudioModule =
   { type_ : Type
   , position : Position
-  , isDragging : Bool
-  , isPrototype : Bool
+  , name : String
+  , controls : Array Control.Control
   }
 
-type Msg = Placeholder
+type alias Prototype =
+  { type_ : Type
+  , controls : Array Control.Control
+  }
+
+type Msg
+  = EndpointClickedPlaceholder
+  | Delegate Int Control.Msg
 
 type Type
   = ControllerModule
@@ -49,216 +95,157 @@ type Type
 
 type alias Position = (Float, Float)
 
-at : (Float, Float) -> AudioModule -> AudioModule
-at (x, y) audioModule =
-  { audioModule | position = ( x, y ) }
+at : Position -> AudioModule -> AudioModule
+at position audioModule =
+    { audioModule | position = position }
 
-movedBy : (Float, Float) -> AudioModule -> AudioModule
-movedBy (dx, dy) audioModule =
+translated : (Float, Float) -> AudioModule  -> AudioModule
+translated (dx, dy) audioModule =
   { audioModule
-  | position = audioModule.position
-  |> Tuple.mapBoth (\x -> x + dx) (\y -> y + dy)
+    | position = audioModule.position
+    |> Tuple.mapBoth (\x -> x + dx) (\y -> y + dy)
   }
 
-dragging : AudioModule -> AudioModule
-dragging audioModule =
-  { audioModule | isDragging = True }
-
-notDragging : AudioModule -> AudioModule
-notDragging audioModule =
-  { audioModule | isDragging = False }
-
-asPrototype : AudioModule -> AudioModule
-asPrototype audioModule =
-  { audioModule | isPrototype = True }
+mapControlWithCmd :
+  (Control.Control -> (Control.Control, Cmd msg))
+  -> Int
+  -> AudioModule
+  -> (AudioModule, Cmd msg)
+mapControlWithCmd transform index audioModule =
+  case (Array.get index audioModule.controls) of
+    Nothing ->
+      (audioModule, Cmd.none)
+    Just control ->
+      let
+        (ctrl, cmd) = transform control
+      in
+        ( { audioModule | controls = Array.set index ctrl audioModule.controls }
+        , cmd
+        )
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
-update : Msg -> AudioModule -> AudioModule
-update msg audioModule =
+update : (Msg -> msg) -> Msg -> AudioModule -> (AudioModule, Cmd msg)
+update delegate msg audioModule =
   case msg of
-    Placeholder -> audioModule
+    EndpointClickedPlaceholder ->
+      Debug.log "caught endpoint placeholder" (audioModule, Cmd.none)
+    Delegate index controlMsg ->
+      mapControlWithCmd
+        (Control.update (delegate << Delegate index) controlMsg)
+        index
+        audioModule
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
+viewPrototype : List (Html.Attribute msg) -> Prototype -> Html.Html msg
+viewPrototype extraAttributes prototype =
+  Html.div
+    ( Attributes.class "module-wrapper" :: extraAttributes )
+    [ Html.div [ Attributes.class "prototype-click-shield"] []
+    , viewEndpointsIn Nothing prototype.type_
+    , viewControls Nothing prototype.controls
+    , viewEndpointsOut Nothing prototype.type_
+    ]
+
 view : (Msg -> msg) -> List (Html.Attribute msg) -> AudioModule -> Html.Html msg
-view msgWrapper extraAttributes audioModule =
+view delegate extraAttributes audioModule =
   let
-    eventAttributes = viewEvents msgWrapper audioModule
-  in
-    viewBasic (List.append eventAttributes extraAttributes) audioModule
-
-viewBasic : List (Html.Attribute msg) -> AudioModule -> Html.Html msg
-viewBasic extraAttributes audioModule =
-  let
-    pixels = (\s -> s ++ "px") << String.fromInt << round
-    (xpx, ypx) = Tuple.mapBoth pixels pixels audioModule.position
-    inputs = endpointsInFor audioModule.type_ |> \ list -> if List.isEmpty list then [] else (Html.text "in:") :: list
-    outputs = endpointsOutFor audioModule.type_ |> \ list -> if List.isEmpty list then [] else (Html.text "out:") :: list
-    controls = List.map htmlForControl (controlsFor audioModule.type_)
-
+    pxFromFloat = \float -> ( String.fromInt << round <| float ) ++ "px"
+    (xpx, ypx) = Tuple.mapBoth pxFromFloat pxFromFloat audioModule.position
   in
     Html.div
-    ( [ Just (Attributes.style "left" xpx)
-      , Just (Attributes.style "top" ypx)
-      , Just (Attributes.class "module-wrapper")
-      , if audioModule.isDragging
-        then Just (Attributes.class "dragging")
-        else Nothing
-      ] |> List.filterMap identity |> List.append extraAttributes
+    ( List.append
+      [ Attributes.style "left" xpx
+      , Attributes.style "top" ypx
+      , Attributes.class "module-wrapper"
+      ]
+      extraAttributes
     )
-    ( [ Just (Html.div [Attributes.class "endpoint-bank"] inputs)
-      , Just (Html.div [Attributes.class "control-bank"] controls)
-      , Just (Html.div [Attributes.class "endpoint-bank"] outputs)
-      , if audioModule.isPrototype
-        then Just ( Html.div [ Attributes.class "prototype-click-shield"] [] )
-        else Nothing
-      ] |> List.filterMap identity
-    )
+    [ viewEndpointsIn (Just delegate) audioModule.type_
+    , viewControls (Just delegate) audioModule.controls
+    , viewEndpointsOut (Just delegate) audioModule.type_
+    ]
 
-viewEvents : (Msg -> msg) -> AudioModule -> List (Html.Attribute msg)
-viewEvents msgWrapper _ =
-  [ Events.onClick (msgWrapper Placeholder) ]
+viewControls : Maybe (Msg -> msg) -> Array Control.Control -> Html.Html msg
+viewControls maybeDelegate controls =
+  let
+    controlView = case maybeDelegate of
+      Nothing ->
+        (\_ control ->
+          Control.view Nothing control)
+      Just delegate ->
+        (\index control ->
+          Control.view (Just <| delegate << Delegate index) control)
+  in
+    Html.div
+      [ Attributes.class "control-bank" ]
+      ( Array.indexedMap controlView controls |> Array.toList )
 
-endpointsInFor : Type -> List (Html.Html msg)
-endpointsInFor type_ =
-  case type_ of
-    ControllerModule ->
-      []
-    DestinationModule ->
-      [ viewEndpoint "signal" ]
-    ConstantModule ->
-      []
-    VCOModule ->
-      [ viewEndpoint "freq"
-      , viewEndpoint "detune"
-      ]
-    VCAModule ->
-      [ viewEndpoint "signal"
-      , viewEndpoint "cv"
-      ]
-    EnvelopeModule ->
-      [ viewEndpoint "gate"
-      , viewEndpoint "trig"
-      ]
-
-endpointsOutFor : Type -> List (Html.Html msg)
-endpointsOutFor type_ =
-  case type_ of
-    ControllerModule ->
-      [ viewEndpoint "freq"
-      , viewEndpoint "gate"
-      , viewEndpoint "trig"
-      ]
-    DestinationModule ->
-      []
-    ConstantModule ->
-      [ viewEndpoint "cv" ]
-    VCOModule ->
-      [ viewEndpoint "signal" ]
-    VCAModule ->
-      [ viewEndpoint "signal" ]
-    EnvelopeModule ->
-      [ viewEndpoint "level" ]
-
-viewEndpoint : String -> Html.Html msg
-viewEndpoint label =
-  Html.div [ Attributes.class "endpoint-wrapper" ]
-  [ Html.div [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ] []
-  , Html.label [ Attributes.class "endpoint-label" ] [ Html.text label ]
-  ]
-
-
-type alias Control =
-  { innerControl : InnerControl
-  , label : Maybe String
-  }
-
-type InnerControl
-  = Radio String String Bool
-  | Number Float Range NumericInput
-
-type alias Range =
-  { max : Float
-  , min : Float
-  , step : Float
-  }
-
-type NumericInput
-  = Knob
-  | Field
-
-controlsFor : Type -> List Control
-controlsFor type_ =
-  case type_ of
-    ControllerModule ->
-      []
-    DestinationModule ->
-      []
-    ConstantModule ->
-      [ { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) Knob
-        , label = Nothing
-      } ]
-    VCOModule ->
-      [ { innerControl = Radio "osc-type" "sine" True, label = Just "sin" }
-      , { innerControl = Radio "osc-type" "square" False, label = Just "sqr" }
-      , { innerControl = Radio "osc-type" "sawtooth" False, label = Just "saw" }
-      , { innerControl = Radio "osc-type" "triangle" False, label = Just "tri" }
-      ]
-    VCAModule ->
-      []
-    EnvelopeModule ->
-      [ { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
-        , label = Just "attack"
-        }
-      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
-        , label = Just "decay"
-        }
-      , { innerControl = Number 0 (inputRange (Just 1) (Just 0) 0.001) Field
-        , label = Just "sustain"
-        }
-      , { innerControl = Number 0 (inputRange Nothing (Just 0) 0.001) Field
-        , label = Just "release"
-        }
-      ]
-
-inputRange : Maybe Float -> Maybe Float -> Float -> Range
-inputRange maybeMax maybeMin step =
-  { max = Maybe.withDefault 3.4028234663852886e38 maybeMax
-  , min = Maybe.withDefault -3.4028234663852886e38 maybeMin
-  , step = step
-  }
-
-htmlForControl : Control -> Html.Html msg
-htmlForControl { innerControl, label } =
-  case label of
-    Nothing ->
-      innerHtmlForControl innerControl
-    Just string ->
-      Html.label [][ Html.text string, innerHtmlForControl innerControl ]
-
-innerHtmlForControl : InnerControl -> Html.Html msg
-innerHtmlForControl innerControl =
-  case innerControl of
-    Radio name value checked ->
-      Html.input
-        [ Attributes.type_ "radio"
-        , Attributes.name name
-        , Attributes.value value
-        , Attributes.checked checked
-        ]
+viewEndpointsIn : Maybe (Msg -> msg) -> Type -> Html.Html msg
+viewEndpointsIn delegate type_ =
+  let
+    elements = case type_ of
+      ControllerModule ->
         []
-    Number value range input ->
-      let
-        commonAttrs =
-          [ Attributes.min (String.fromFloat range.min)
-          , Attributes.max (String.fromFloat range.max)
-          , Attributes.step (String.fromFloat range.step)
-          , Attributes.value (String.fromFloat value)
-          ]
-      in
-      case input of
-        Knob ->
-          Html.node "knob-control" commonAttrs []
-        Field ->
-          Html.input (Attributes.type_ "number" :: commonAttrs) []
+      DestinationModule ->
+        [ viewEndpoint delegate "signal" ]
+      ConstantModule ->
+        []
+      VCOModule ->
+        [ viewEndpoint delegate "freq"
+        , viewEndpoint delegate "detune"
+        ]
+      VCAModule ->
+        [ viewEndpoint delegate "signal"
+        , viewEndpoint delegate "cv"
+        ]
+      EnvelopeModule ->
+        [ viewEndpoint delegate "gate"
+        , viewEndpoint delegate "trig"
+        ]
+    div = Html.div [ Attributes.class "endpoint-bank" ]
+  in
+    if List.isEmpty elements
+    then div []
+    else div <| Html.text "in:" :: elements
+
+viewEndpointsOut : Maybe (Msg -> msg) -> Type -> Html.Html msg
+viewEndpointsOut delegate type_ =
+  let
+    elements = case type_ of
+      ControllerModule ->
+        [ viewEndpoint delegate "freq"
+        , viewEndpoint delegate "gate"
+        , viewEndpoint delegate "trig"
+        ]
+      DestinationModule ->
+        []
+      ConstantModule ->
+        [ viewEndpoint delegate "cv" ]
+      VCOModule ->
+        [ viewEndpoint delegate "signal" ]
+      VCAModule ->
+        [ viewEndpoint delegate "signal" ]
+      EnvelopeModule ->
+        [ viewEndpoint delegate "level" ]
+    div = Html.div [ Attributes.class "endpoint-bank" ]
+  in
+    if List.isEmpty elements
+    then div []
+    else div <| Html.text "out:" :: elements
+
+viewEndpoint : Maybe (Msg -> msg) -> String -> Html.Html msg
+viewEndpoint maybeDelegate label =
+  let
+    events = case maybeDelegate of
+      Nothing ->
+        []
+      Just delegate ->
+        [ Events.onClick (delegate EndpointClickedPlaceholder) ]
+  in
+    Html.div
+      ( Attributes.class "endpoint-wrapper" :: events )
+      [ Html.div [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ] []
+      , Html.label [ Attributes.class "endpoint-label" ] [ Html.text label ]
+      ]

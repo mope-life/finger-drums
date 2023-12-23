@@ -10,8 +10,8 @@
 
   --number-input-color: lime;
   --number-input-background-color: black;
-  --number-input-width: 4.5em;
-  --number-input-font: 1.3em monospace;
+  --number-input-width: 6ch;
+  --number-input-font: monospace;
 }
 
 * {
@@ -28,8 +28,8 @@ body {
   position: absolute;
   left: 0;
   top: 0;
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   pointer-events: none;
   z-index: 2;
 }
@@ -48,18 +48,19 @@ body {
 #audio-module-map {
   background: var(--map-background);
   position: absolute;
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
 }
 
 #prototype-bank {
   background: var(--prototype-bank-background);
-  height: 100vh;
+  height: 100%;
   position: absolute;
   display: grid;
   align-content: start;
   gap: 2em;
   padding: 1em;
+  overflow: scroll;
 }
 
 #prototype-bank > .module-wrapper {
@@ -87,11 +88,12 @@ body {
 
 #audio-module-map > .module-wrapper {
   position: absolute;
+  z-index: 100;
 }
 
 .module-wrapper.dragging {
   cursor: grabbing;
-  z-index: 10;
+  z-index: 1000 !important;
 }
 
 .endpoint-jack {
