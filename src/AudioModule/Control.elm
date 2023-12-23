@@ -7,7 +7,6 @@ module AudioModule.Control exposing
   , checked
   , unchecked
   , labeled
-  , unlabeled
   , update
   , view
   )
@@ -17,118 +16,151 @@ import Html.Attributes as Attributes
 import Html.Events
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Task
+import Browser.Dom as Dom
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-radioControl : String -> String -> Control
-radioControl group value =
-  { input = Radio group value False
-  , label = Nothing
-  }
+radioControl : String -> String -> String -> Control
+radioControl id group value =
+  Radio group value False
+  |> genericControl id
 
-knobControl : Control
-knobControl =
-  { input = Knob 0 Nothing Nothing Nothing
-  , label = Nothing
-  }
+knobControl : String -> Control
+knobControl id =
+  Knob "0" { max = Nothing, min = Nothing, intervals = Nothing }
+  |> genericControl id
 
-numberControl : Control
-numberControl =
-  { input = Number 0 Nothing Nothing Nothing
+numberControl : String -> Control
+numberControl id =
+  Number "0" { max = Nothing, min = Nothing, step = Nothing }
+  |> genericControl id
+
+genericControl : String -> Input -> Control
+genericControl id input =
+  { input = input
   , label = Nothing
+  , id = id
   }
 
 checked : Control -> Control
-checked { input, label } =
-  case input of
+checked control =
+  case control.input of
     Radio group value _ ->
-      { input = Radio group value True, label = label }
+      { control | input = Radio group value True }
     _ ->
-      { input = input, label = label }
+      control
 
 unchecked : Control -> Control
-unchecked { input, label } =
-  case input of
+unchecked control =
+  case control.input of
     Radio group value _ ->
-      { input = Radio group value False, label = label }
+      { control | input = Radio group value False }
     _ ->
-      { input = input, label = label }
+      control
 
 labeled : String -> Control -> Control
 labeled label control =
   { control | label = Just label }
 
-unlabeled : Control -> Control
-unlabeled control =
-  { control | label = Nothing }
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
 type alias Control =
   { input : Input
+  , id : String
   , label : Maybe String
   }
 
 type Input
   = Radio String String Bool
-  | Number Float (Maybe Float) (Maybe Float) (Maybe Float)
-  | Knob Float (Maybe Float) (Maybe Float) (Maybe Int)
+  | Number String NumberParameters
+  | Knob String KnobParameters
+
+type alias NumberParameters =
+  { max : Maybe Float
+  , min : Maybe Float
+  , step : Maybe Float
+  }
+
+type alias KnobParameters =
+  { max : Maybe Float
+  , min : Maybe Float
+  , intervals : Maybe Int
+  }
 
 type Msg
-  = NumbericValue Float
+  = Value String
+  | Click
+  | Focus (Result Dom.Error ())
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
 update : (Msg -> msg) -> Msg -> Control -> (Control, Cmd msg)
 update delegate msg control =
   case msg of
-    NumbericValue value ->
+    Value value ->
       case control.input of
-        Knob _ max min intervals ->
-          ({ control | input = Knob value max min intervals }, Cmd.none)
-        Number _ max min step ->
-          ({ control | input = Number value max min step }, Cmd.none)
+        Knob _ parameters ->
+          ({ control | input = Knob value parameters }, Cmd.none)
+        Number _ parameters ->
+          ({ control | input = Number value parameters }, Cmd.none)
         _ ->
+          (control, Cmd.none)
+    Click ->
+      case control.input of
+        Number _ _ ->
+          (control, Task.attempt (delegate << Focus) (Dom.focus control.id))
+        _ ->
+          (control, Cmd.none)
+    Focus result ->
+      case result of
+        Err (Dom.NotFound string) ->
+          Debug.log string (control, Cmd.none)
+        Ok () ->
           (control, Cmd.none)
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
 view : Maybe (Msg -> msg) -> Control -> Html.Html msg
-view delegate { input, label } =
-  case label of
+view delegate control =
+  let
+    input = viewInput delegate control.id control.input
+  in case control.label of
     Nothing ->
-      viewInput delegate input
-    Just string ->
-      viewLabeledInput delegate input string
+      input
+    Just label ->
+      Html.label [] [ Html.text label, input ]
 
-viewLabeledInput : Maybe (Msg -> msg) -> Input -> String -> Html.Html msg
-viewLabeledInput delegate input label =
-  Html.label [] [ Html.text label, viewInput delegate input ]
-
-viewInput : Maybe (Msg -> msg) -> Input -> Html.Html msg
-viewInput delegate input =
+viewInput : Maybe (Msg -> msg) -> String -> Input -> Html.Html msg
+viewInput delegate id input =
   case input of
     Radio name value on ->
       Html.input
         [ Attributes.type_ "radio"
         , Attributes.name name
         , Attributes.value value
-        , Attributes.checked on
+        -- , Attributes.checked on
+        , Attributes.id id
         ]
         []
-    Number value max min step ->
+    Number value { max, min, step } ->
       Html.input
-        ( [ "number" |> Just << Attributes.type_
-          , value |> Just << Attributes.property "value" << Encode.float
-          , max |> Maybe.map (Attributes.attribute "max" << String.fromFloat)
-          , min |> Maybe.map (Attributes.attribute "min" << String.fromFloat)
-          , step |> Maybe.map (Attributes.attribute "step" << String.fromFloat)
+        ( [ id |> Just << Attributes.id
+          , "number" |> Just << Attributes.type_
+          , value |> Just << Attributes.property "value" << Encode.string
+          , max |> Maybe.map ( Attributes.attribute "max" << String.fromFloat )
+          , min |> Maybe.map ( Attributes.attribute "min" << String.fromFloat )
+          , step |> Maybe.map ( Attributes.attribute "step" << String.fromFloat )
+          , delegate |> Maybe.map (\d -> Html.Events.onClick (d Click))
+          , delegate |> Maybe.map (\d -> Html.Events.onInput (d << Value))
           ] |> List.filterMap identity
         )
         []
-    Knob value max min intervals ->
+    Knob value { max, min, intervals } ->
       Html.node "knob-control"
-        ( [ value |> Just << Attributes.property "value" << Encode.float
+        ( [ id |> Just << Attributes.id
+          , value |> Just << Attributes.property "value" << Encode.string
           , max |> Maybe.map ( Attributes.attribute "max" << String.fromFloat )
           , min |> Maybe.map ( Attributes.attribute "min" << String.fromFloat )
           , intervals |> Maybe.map ( Attributes.attribute "intervals" << String.fromInt )
@@ -139,4 +171,5 @@ viewInput delegate input =
 
 knobInputDecoder : (Msg -> msg) -> Decode.Decoder msg
 knobInputDecoder delegate =
-  Decode.map (delegate << NumbericValue) <| Decode.field "detail" Decode.float
+  Decode.map (delegate << Value << String.fromFloat) <| Decode.field "detail" Decode.float
+

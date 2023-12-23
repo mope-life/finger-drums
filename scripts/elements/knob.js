@@ -262,7 +262,11 @@ class KnobControl extends HTMLElement {
     }
 
     set value(newv) {
-        const clamped = this._clamp(newv, this._min, this._max);
+        if (isNaN(+newv)) {
+            return;
+        }
+
+        const clamped = this._clamp(+newv, this._min, this._max);
         const fixed = this._applyStep(clamped);
 
         // we always call setTransform, because sometimes we need to update the
@@ -272,15 +276,14 @@ class KnobControl extends HTMLElement {
         if (fixed === this._value) {
             return;
         }
-        else {
-            this._value = fixed;
-            this.dispatchEvent(new CustomEvent(
-                'input', {
-                bubbles: true,
-                cancelable: true,
-                detail: fixed
-            }));
-        }
+
+        this._value = fixed;
+        this.dispatchEvent(new CustomEvent(
+            'input', {
+            bubbles: true,
+            cancelable: true,
+            detail: fixed
+        }));
     }
 
     get value() {

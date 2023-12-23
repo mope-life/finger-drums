@@ -44,27 +44,31 @@ initControls type_ name =
       Array.empty
     ConstantModule ->
       Array.fromList
-        [ Control.knobControl ]
+        [ Control.knobControl ("knob-" ++ name) ]
     VCOModule ->
       Array.fromList
-        [ Control.radioControl ("osc-" ++ name) "sine"
+        [ Control.radioControl ("radio-sin-" ++ name) ("osc-" ++ name) "sine"
           |> Control.labeled "sin"
           |> Control.checked
-        , Control.radioControl ("osc-" ++ name) "square"
+        , Control.radioControl ("radio-sqr-" ++ name) ("osc-" ++ name) "square"
           |> Control.labeled "sqr"
-        , Control.radioControl ("osc-" ++ name) "sawtooth"
+        , Control.radioControl ("radio-saw-" ++ name) ("osc-" ++ name) "sawtooth"
           |> Control.labeled "saw"
-        , Control.radioControl ("osc-" ++ name) "triangle"
+        , Control.radioControl ("radio-tri-" ++ name) ("osc-" ++ name) "triangle"
           |> Control.labeled "tri"
         ]
     VCAModule ->
       Array.empty
     EnvelopeModule ->
       Array.fromList
-        [ Control.numberControl |> Control.labeled "A"
-        , Control.numberControl |> Control.labeled "D"
-        , Control.numberControl |> Control.labeled "S"
-        , Control.numberControl |> Control.labeled "R"
+        [ Control.numberControl ("number-A-" ++ name)
+          |> Control.labeled "A"
+        , Control.numberControl ("number-D-" ++ name)
+          |> Control.labeled "D"
+        , Control.numberControl ("number-S-" ++ name)
+          |> Control.labeled "S"
+        , Control.numberControl ("number-R-" ++ name)
+          |> Control.labeled "R"
         ]
 
 --------------------------------------------------------------------------------
