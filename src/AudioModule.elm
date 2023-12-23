@@ -44,41 +44,42 @@ initControls type_ name =
     DestinationModule ->
       Array.empty
     ConstantModule ->
-      Array.fromList
-        [ Control.knobControl ("const-" ++ name ++ "-knob") ]
+      [ Control.knobControl ("const-" ++ name ++ "-knob")
+      ]
+      |> Array.fromList
     VCOModule ->
       let
         group = "osc-" ++ name
       in
-        Array.fromList
-          [ Control.controlGroup
-            [ Control.radioControl "sine" group (group ++ "-radio-sin")
-              |> Control.labeled "sin"
-            , Control.radioControl "square" group (group ++ "-radio-sqr")
-              |> Control.labeled "sqr"
-            , Control.radioControl "sawtooth" group (group ++ "-radio-saw")
-              |> Control.labeled "saw"
-            , Control.radioControl "triangle" group (group ++ "-radio-tri")
-              |> Control.labeled "tri"
-            ]
-            group
+        [ Control.controlGroup
+          [ Control.radioControl "sine" group (group ++ "-radio-sin")
+            |> Control.labeled "sin"
+          , Control.radioControl "square" group (group ++ "-radio-sqr")
+            |> Control.labeled "sqr"
+          , Control.radioControl "sawtooth" group (group ++ "-radio-saw")
+            |> Control.labeled "saw"
+          , Control.radioControl "triangle" group (group ++ "-radio-tri")
+            |> Control.labeled "tri"
           ]
+          group
+        ]
+        |> Array.fromList
     VCAModule ->
       Array.empty
     EnvelopeModule ->
       let
         group = "env-" ++ name
       in
-        Array.fromList
-          [ Control.numberControl (group ++ "-number-A")
-            |> Control.labeled "A"
-          , Control.numberControl (group ++ "-number-D")
-            |> Control.labeled "D"
-          , Control.numberControl (group ++ "-number-S")
-            |> Control.labeled "S"
-          , Control.numberControl (group ++ "-number-R")
-            |> Control.labeled "R"
-          ]
+        [ Control.numberControl (group ++ "-number-A")
+          |> Control.labeled "A"
+        , Control.numberControl (group ++ "-number-D")
+          |> Control.labeled "D"
+        , Control.numberControl (group ++ "-number-S")
+          |> Control.labeled "S"
+        , Control.numberControl (group ++ "-number-R")
+          |> Control.labeled "R"
+        ]
+        |> Array.fromList
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------

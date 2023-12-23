@@ -55,7 +55,7 @@ type Msg
   | OnDragEnd
   | OnDragBy Draggable.Delta
   | DragMsg (Draggable.Msg Id)
-  | Delegate Id AudioModule.Msg
+  | AudioModuleDelegate Id AudioModule.Msg
 
 type alias Id = Int
 
@@ -133,9 +133,9 @@ update msg model =
       ( withNothingDragged model, Cmd.none )
     OnDragBy delta ->
       ( doDrag delta model, Cmd.none )
-    Delegate id moduleMsg ->
+    AudioModuleDelegate id moduleMsg ->
       mapAudioModuleWithCmd
-        (AudioModule.update (Delegate id) moduleMsg) id model
+        (AudioModule.update (AudioModuleDelegate id) moduleMsg) id model
 
 insertNewAudioModule : AudioModule.Type -> AudioModule.Position -> Model -> Model
 insertNewAudioModule type_ position model =
@@ -189,12 +189,12 @@ viewAudioModules : Model -> List (Html.Html Msg)
 viewAudioModules model =
   let
     extraAttributes id =
-      (audioModuleDragTrigger id) ::
-        if audioModuleIsDragged id model
-        then [Attributes.class "dragging"]
-        else []
+      audioModuleDragTrigger id ::
+      if audioModuleIsDragged id model
+      then [Attributes.class "dragging"]
+      else []
     viewModule (id, audioModule) =
-      AudioModule.view (Delegate id) (extraAttributes id) audioModule
+      AudioModule.view (AudioModuleDelegate id) (extraAttributes id) audioModule
   in
     model.audioModules |> Dict.toList |> List.map viewModule
 
@@ -216,13 +216,7 @@ audioModuleIsDragged id model =
 
 positionDecoder : Decode.Decoder AudioModule.Position
 positionDecoder =
-  Decode.map
-    ( \clickInfo ->
-        ( clickInfo.pageX - clickInfo.offsetX
-        , clickInfo.pageY - clickInfo.offsetY
-        )
-    )
-    mouseDownDecoder
+  Decode.map positionFromClickInfo mouseDownDecoder
 
 mouseDownDecoder : Decode.Decoder ClickInfo
 mouseDownDecoder =
@@ -231,6 +225,12 @@ mouseDownDecoder =
     ( Decode.field "offsetY" Decode.float)
     ( Decode.field "pageX" Decode.float)
     ( Decode.field "pageY" Decode.float)
+
+positionFromClickInfo : ClickInfo -> AudioModule.Position
+positionFromClickInfo clickInfo =
+  ( clickInfo.pageX - clickInfo.offsetX
+  , clickInfo.pageY - clickInfo.offsetY
+  )
 
 type alias ClickInfo =
   { offsetX : Float

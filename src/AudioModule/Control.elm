@@ -102,19 +102,15 @@ update : (Msg -> msg) -> Msg -> Control -> (Control, Cmd msg)
 update delegate msg control =
   case msg of
     Value value ->
-      Debug.log ("Received " ++ value) ( { control | value = value }, Cmd.none )
+      ( { control | value = value }, Cmd.none )
     Click ->
       case control.input of
         Number _ ->
           ( control, Task.attempt (delegate << Focus) (Dom.focus control.id) )
         _ ->
           ( control, Cmd.none )
-    Focus result ->
-      case result of
-        Err ( Dom.NotFound string ) ->
-          Debug.log string ( control, Cmd.none )
-        Ok ( ) ->
-          ( control, Cmd.none )
+    Focus _ ->
+      ( control, Cmd.none )
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
