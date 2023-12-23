@@ -1,11 +1,10 @@
 module AudioModule.Control exposing
   ( Control
   , Msg
+  , controlGroup
   , radioControl
   , knobControl
   , numberControl
-  , checked
-  , unchecked
   , labeled
   , update
   , view
@@ -18,64 +17,67 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Task
 import Browser.Dom as Dom
+import Array exposing (Array)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
+controlGroup : List Control -> String -> Control
+controlGroup controls id =
+  let
+    initialValue = case (List.head controls) of
+      Nothing ->
+        ""
+      Just control ->
+        control.value
+  in
+    ControlGroup ( Array.fromList controls )
+    |> genericControl id initialValue
+
 radioControl : String -> String -> String -> Control
-radioControl id group value =
-  Radio group value False
-  |> genericControl id
+radioControl value group id =
+  Radio { group = group }
+  |> genericControl id value
 
 knobControl : String -> Control
 knobControl id =
-  Knob "0" { max = Nothing, min = Nothing, intervals = Nothing }
-  |> genericControl id
+  Knob { max = Nothing, min = Nothing, intervals = Nothing }
+  |> genericControl id "0"
 
 numberControl : String -> Control
 numberControl id =
-  Number "0" { max = Nothing, min = Nothing, step = Nothing }
-  |> genericControl id
+  Number { max = Nothing, min = Nothing, step = Nothing }
+  |> genericControl id "0"
 
-genericControl : String -> Input -> Control
-genericControl id input =
-  { input = input
+genericControl : String -> String -> Input -> Control
+genericControl id initialValue input =
+  { id = id
+  , input = input
+  , value = initialValue
   , label = Nothing
-  , id = id
   }
-
-checked : Control -> Control
-checked control =
-  case control.input of
-    Radio group value _ ->
-      { control | input = Radio group value True }
-    _ ->
-      control
-
-unchecked : Control -> Control
-unchecked control =
-  case control.input of
-    Radio group value _ ->
-      { control | input = Radio group value False }
-    _ ->
-      control
 
 labeled : String -> Control -> Control
 labeled label control =
   { control | label = Just label }
 
-
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
 type alias Control =
-  { input : Input
-  , id : String
+  { id : String
+  , input : Input
+  , value : String
   , label : Maybe String
   }
 
 type Input
-  = Radio String String Bool
-  | Number String NumberParameters
-  | Knob String KnobParameters
+  = Radio RadioParameters
+  | Number NumberParameters
+  | Knob KnobParameters
+  | ControlGroup (Array Control)
+
+type alias RadioParameters =
+  { group : String
+  }
 
 type alias NumberParameters =
   { max : Maybe Float
@@ -100,51 +102,46 @@ update : (Msg -> msg) -> Msg -> Control -> (Control, Cmd msg)
 update delegate msg control =
   case msg of
     Value value ->
-      case control.input of
-        Knob _ parameters ->
-          ({ control | input = Knob value parameters }, Cmd.none)
-        Number _ parameters ->
-          ({ control | input = Number value parameters }, Cmd.none)
-        _ ->
-          (control, Cmd.none)
+      Debug.log ("Received " ++ value) ( { control | value = value }, Cmd.none )
     Click ->
       case control.input of
-        Number _ _ ->
-          (control, Task.attempt (delegate << Focus) (Dom.focus control.id))
+        Number _ ->
+          ( control, Task.attempt (delegate << Focus) (Dom.focus control.id) )
         _ ->
-          (control, Cmd.none)
+          ( control, Cmd.none )
     Focus result ->
       case result of
-        Err (Dom.NotFound string) ->
-          Debug.log string (control, Cmd.none)
-        Ok () ->
-          (control, Cmd.none)
+        Err ( Dom.NotFound string ) ->
+          Debug.log string ( control, Cmd.none )
+        Ok ( ) ->
+          ( control, Cmd.none )
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
 view : Maybe (Msg -> msg) -> Control -> Html.Html msg
 view delegate control =
   let
-    input = viewInput delegate control.id control.input
+    input = viewInput delegate control
   in case control.label of
     Nothing ->
       input
     Just label ->
       Html.label [] [ Html.text label, input ]
 
-viewInput : Maybe (Msg -> msg) -> String -> Input -> Html.Html msg
-viewInput delegate id input =
+viewInput : Maybe (Msg -> msg) -> Control -> Html.Html msg
+viewInput delegate { id, input, value } =
   case input of
-    Radio name value on ->
+    Radio { group } ->
       Html.input
-        [ Attributes.type_ "radio"
-        , Attributes.name name
-        , Attributes.value value
-        -- , Attributes.checked on
-        , Attributes.id id
-        ]
+        ( [ id |> Just << Attributes.id
+          , "radio" |> Just << Attributes.type_
+          , group |> Just << Attributes.name
+          , value |> Just << Attributes.value
+          , delegate |> Maybe.map (\d -> Html.Events.onInput (d << Value))
+          ] |> List.filterMap identity
+        )
         []
-    Number value { max, min, step } ->
+    Number { max, min, step } ->
       Html.input
         ( [ id |> Just << Attributes.id
           , "number" |> Just << Attributes.type_
@@ -157,7 +154,7 @@ viewInput delegate id input =
           ] |> List.filterMap identity
         )
         []
-    Knob value { max, min, intervals } ->
+    Knob { max, min, intervals } ->
       Html.node "knob-control"
         ( [ id |> Just << Attributes.id
           , value |> Just << Attributes.property "value" << Encode.string
@@ -168,6 +165,10 @@ viewInput delegate id input =
           ] |> List.filterMap identity
         )
         []
+    ControlGroup controls ->
+      Html.div
+        [ Attributes.class "input-group" ]
+        ( Array.map (view delegate) controls |> Array.toList )
 
 knobInputDecoder : (Msg -> msg) -> Decode.Decoder msg
 knobInputDecoder delegate =

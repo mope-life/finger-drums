@@ -18,6 +18,7 @@ import Html.Attributes as Attributes
 import Html.Events as Events
 import AudioModule.Control as Control
 import Array exposing (Array)
+import Svg.Attributes exposing (direction)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -44,32 +45,40 @@ initControls type_ name =
       Array.empty
     ConstantModule ->
       Array.fromList
-        [ Control.knobControl ("knob-" ++ name) ]
+        [ Control.knobControl ("const-" ++ name ++ "-knob") ]
     VCOModule ->
-      Array.fromList
-        [ Control.radioControl ("radio-sin-" ++ name) ("osc-" ++ name) "sine"
-          |> Control.labeled "sin"
-          |> Control.checked
-        , Control.radioControl ("radio-sqr-" ++ name) ("osc-" ++ name) "square"
-          |> Control.labeled "sqr"
-        , Control.radioControl ("radio-saw-" ++ name) ("osc-" ++ name) "sawtooth"
-          |> Control.labeled "saw"
-        , Control.radioControl ("radio-tri-" ++ name) ("osc-" ++ name) "triangle"
-          |> Control.labeled "tri"
-        ]
+      let
+        group = "osc-" ++ name
+      in
+        Array.fromList
+          [ Control.controlGroup
+            [ Control.radioControl "sine" group (group ++ "-radio-sin")
+              |> Control.labeled "sin"
+            , Control.radioControl "square" group (group ++ "-radio-sqr")
+              |> Control.labeled "sqr"
+            , Control.radioControl "sawtooth" group (group ++ "-radio-saw")
+              |> Control.labeled "saw"
+            , Control.radioControl "triangle" group (group ++ "-radio-tri")
+              |> Control.labeled "tri"
+            ]
+            group
+          ]
     VCAModule ->
       Array.empty
     EnvelopeModule ->
-      Array.fromList
-        [ Control.numberControl ("number-A-" ++ name)
-          |> Control.labeled "A"
-        , Control.numberControl ("number-D-" ++ name)
-          |> Control.labeled "D"
-        , Control.numberControl ("number-S-" ++ name)
-          |> Control.labeled "S"
-        , Control.numberControl ("number-R-" ++ name)
-          |> Control.labeled "R"
-        ]
+      let
+        group = "env-" ++ name
+      in
+        Array.fromList
+          [ Control.numberControl (group ++ "-number-A")
+            |> Control.labeled "A"
+          , Control.numberControl (group ++ "-number-D")
+            |> Control.labeled "D"
+          , Control.numberControl (group ++ "-number-S")
+            |> Control.labeled "S"
+          , Control.numberControl (group ++ "-number-R")
+            |> Control.labeled "R"
+          ]
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
@@ -96,6 +105,10 @@ type Type
   | VCOModule
   | VCAModule
   | EnvelopeModule
+
+type Direction
+  = In
+  | Out
 
 type alias Position = (Float, Float)
 
@@ -147,9 +160,9 @@ viewPrototype extraAttributes prototype =
   Html.div
     ( Attributes.class "module-wrapper" :: extraAttributes )
     [ Html.div [ Attributes.class "prototype-click-shield"] []
-    , viewEndpointsIn Nothing prototype.type_
-    , viewControls Nothing prototype.controls
-    , viewEndpointsOut Nothing prototype.type_
+    , viewEndpointBank Nothing prototype.type_ In
+    , viewControlBank Nothing prototype.controls
+    , viewEndpointBank Nothing prototype.type_ Out
     ]
 
 view : (Msg -> msg) -> List (Html.Attribute msg) -> AudioModule -> Html.Html msg
@@ -166,13 +179,13 @@ view delegate extraAttributes audioModule =
       ]
       extraAttributes
     )
-    [ viewEndpointsIn (Just delegate) audioModule.type_
-    , viewControls (Just delegate) audioModule.controls
-    , viewEndpointsOut (Just delegate) audioModule.type_
+    [ viewEndpointBank (Just delegate) audioModule.type_ In
+    , viewControlBank (Just delegate) audioModule.controls
+    , viewEndpointBank (Just delegate) audioModule.type_ Out
     ]
 
-viewControls : Maybe (Msg -> msg) -> Array Control.Control -> Html.Html msg
-viewControls maybeDelegate controls =
+viewControlBank : Maybe (Msg -> msg) -> Array Control.Control -> Html.Html msg
+viewControlBank maybeDelegate controls =
   let
     controlView = case maybeDelegate of
       Nothing ->
@@ -186,58 +199,60 @@ viewControls maybeDelegate controls =
       [ Attributes.class "control-bank" ]
       ( Array.indexedMap controlView controls |> Array.toList )
 
-viewEndpointsIn : Maybe (Msg -> msg) -> Type -> Html.Html msg
-viewEndpointsIn delegate type_ =
+viewEndpointBank : Maybe (Msg -> msg) -> Type -> Direction -> Html.Html msg
+viewEndpointBank delegate type_ direction =
   let
-    elements = case type_ of
-      ControllerModule ->
-        []
-      DestinationModule ->
-        [ viewEndpoint delegate "signal" ]
-      ConstantModule ->
-        []
-      VCOModule ->
-        [ viewEndpoint delegate "freq"
-        , viewEndpoint delegate "detune"
-        ]
-      VCAModule ->
-        [ viewEndpoint delegate "signal"
-        , viewEndpoint delegate "cv"
-        ]
-      EnvelopeModule ->
-        [ viewEndpoint delegate "gate"
-        , viewEndpoint delegate "trig"
-        ]
+    ( elements, label ) = case direction of
+      In ->
+        ( viewEndpointsIn delegate type_, "in:" )
+      Out ->
+        ( viewEndpointsOut delegate type_, "out:" )
     div = Html.div [ Attributes.class "endpoint-bank" ]
   in
     if List.isEmpty elements
-    then div []
-    else div <| Html.text "in:" :: elements
+      then div []
+      else div <| Html.text label :: elements
 
-viewEndpointsOut : Maybe (Msg -> msg) -> Type -> Html.Html msg
+viewEndpointsIn : Maybe (Msg -> msg) -> Type -> List (Html.Html msg)
+viewEndpointsIn delegate type_ =
+  case type_ of
+    ControllerModule ->
+      []
+    DestinationModule ->
+      [ viewEndpoint delegate "signal" ]
+    ConstantModule ->
+      []
+    VCOModule ->
+      [ viewEndpoint delegate "freq"
+      , viewEndpoint delegate "detune"
+      ]
+    VCAModule ->
+      [ viewEndpoint delegate "signal"
+      , viewEndpoint delegate "cv"
+      ]
+    EnvelopeModule ->
+      [ viewEndpoint delegate "gate"
+      , viewEndpoint delegate "trig"
+      ]
+
+viewEndpointsOut : Maybe (Msg -> msg) -> Type -> List (Html.Html msg)
 viewEndpointsOut delegate type_ =
-  let
-    elements = case type_ of
-      ControllerModule ->
-        [ viewEndpoint delegate "freq"
-        , viewEndpoint delegate "gate"
-        , viewEndpoint delegate "trig"
-        ]
-      DestinationModule ->
-        []
-      ConstantModule ->
-        [ viewEndpoint delegate "cv" ]
-      VCOModule ->
-        [ viewEndpoint delegate "signal" ]
-      VCAModule ->
-        [ viewEndpoint delegate "signal" ]
-      EnvelopeModule ->
-        [ viewEndpoint delegate "level" ]
-    div = Html.div [ Attributes.class "endpoint-bank" ]
-  in
-    if List.isEmpty elements
-    then div []
-    else div <| Html.text "out:" :: elements
+  case type_ of
+    ControllerModule ->
+      [ viewEndpoint delegate "freq"
+      , viewEndpoint delegate "gate"
+      , viewEndpoint delegate "trig"
+      ]
+    DestinationModule ->
+      []
+    ConstantModule ->
+      [ viewEndpoint delegate "cv" ]
+    VCOModule ->
+      [ viewEndpoint delegate "signal" ]
+    VCAModule ->
+      [ viewEndpoint delegate "signal" ]
+    EnvelopeModule ->
+      [ viewEndpoint delegate "level" ]
 
 viewEndpoint : Maybe (Msg -> msg) -> String -> Html.Html msg
 viewEndpoint maybeDelegate label =

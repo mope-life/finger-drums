@@ -140,7 +140,7 @@ body {
   width: 6ch;
 }
 
-.control-bank {
+.control-bank, .input-group {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -148,7 +148,7 @@ body {
 }
 
 .control-bank:not(:empty) {
-  padding-left: 2px;
+  padding: 0 2px;
 }
 
 .grabbable {
