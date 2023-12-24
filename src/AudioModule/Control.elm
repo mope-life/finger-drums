@@ -6,6 +6,7 @@ module AudioModule.Control exposing
   , initKnob
   , initNumber
   , labeled
+  , withDelegate
   , update
   , view
   )
@@ -21,7 +22,7 @@ import Array exposing (Array)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-initControlGroup : List Control -> String -> Control
+initControlGroup : List (Control msg) -> String -> Control msg
 initControlGroup controls id =
   let
     initialValue = case (List.head controls) of
@@ -33,47 +34,53 @@ initControlGroup controls id =
     ControlGroup ( Array.fromList controls )
     |> initGeneric id initialValue
 
-initRadio : String -> String -> String -> Control
+initRadio : String -> String -> String -> Control msg
 initRadio value group id =
   Radio { group = group }
   |> initGeneric id value
 
-initKnob : String -> Control
+initKnob : String -> Control msg
 initKnob id =
   Knob { max = Nothing, min = Nothing, intervals = Nothing }
   |> initGeneric id "0"
 
-initNumber : String -> Control
+initNumber : String -> Control msg
 initNumber id =
   Number { max = Nothing, min = Nothing, step = Nothing }
   |> initGeneric id "0"
 
-initGeneric : String -> String -> Input -> Control
+initGeneric : String -> String -> Input msg -> Control msg
 initGeneric id initialValue input =
   { id = id
   , input = input
   , value = initialValue
   , label = Nothing
+  , delegate = Nothing
   }
 
-labeled : String -> Control -> Control
+labeled : String ->Control msg-> Control  msg
 labeled label control =
   { control | label = Just label }
 
+withDelegate : (Msg -> msg) -> Control msg -> Control msg
+withDelegate delegate control =
+  { control | delegate = Just delegate }
+
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
-type alias Control =
+type alias Control msg =
   { id : String
-  , input : Input
+  , input : Input msg
   , value : String
   , label : Maybe String
+  , delegate : Maybe (Msg -> msg)
   }
 
-type Input
+type Input msg
   = Radio RadioParameters
   | Number NumberParameters
   | Knob KnobParameters
-  | ControlGroup (Array Control)
+  | ControlGroup (Array (Control msg))
 
 type alias RadioParameters =
   { group : String
@@ -98,15 +105,21 @@ type Msg
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
-update : (Msg -> msg) -> Msg -> Control -> (Control, Cmd msg)
-update delegate msg control =
+update : Msg -> Control msg -> (Control msg, Cmd msg)
+update msg control =
   case msg of
     Value value ->
       ( { control | value = value }, Cmd.none )
     Click ->
       case control.input of
         Number _ ->
-          ( control, Task.attempt (delegate << Focus) (Dom.focus control.id) )
+          ( control
+          , case control.delegate of
+            Nothing ->
+              Cmd.none
+            Just delegate ->
+              Task.attempt (delegate << Focus) (Dom.focus control.id)
+          )
         _ ->
           ( control, Cmd.none )
     Focus _ ->
@@ -114,18 +127,18 @@ update delegate msg control =
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
-view : Maybe (Msg -> msg) -> Control -> Html.Html msg
-view delegate control =
+view : Control msg -> Html.Html msg
+view control =
   let
-    input = viewInput delegate control
+    input = viewInput control
   in case control.label of
     Nothing ->
       input
     Just label ->
       Html.label [] [ Html.text label, input ]
 
-viewInput : Maybe (Msg -> msg) -> Control -> Html.Html msg
-viewInput delegate { id, input, value } =
+viewInput : Control msg -> Html.Html msg
+viewInput { id, input, value, delegate } =
   case input of
     Radio { group } ->
       Html.input
@@ -164,7 +177,7 @@ viewInput delegate { id, input, value } =
     ControlGroup controls ->
       Html.div
         [ Attributes.class "input-group" ]
-        ( Array.map (view delegate) controls |> Array.toList )
+        ( Array.map view controls |> Array.toList )
 
 knobInputDecoder : (Msg -> msg) -> Decode.Decoder msg
 knobInputDecoder delegate =

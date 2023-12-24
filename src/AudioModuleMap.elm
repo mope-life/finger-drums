@@ -9,8 +9,7 @@ import Platform.Cmd as Cmd
 import Draggable
 import Draggable.Events
 import Browser.Events
-
-import MouseEvent exposing (Point)
+import MouseEvent exposing (Point, Position)
 import AudioModule exposing (AudioModule, Msg(..))
 import AudioModule.Endpoint exposing (Msg(..))
 import Svg.Attributes
@@ -30,11 +29,11 @@ main =
 init : () -> ( Model, Cmd Msg )
 init _ =
   ( { audioModules = Dict.empty
-    , prototypes =
-      [ AudioModule.initPrototype AudioModule.ConstantModule
-      , AudioModule.initPrototype AudioModule.VCOModule
-      , AudioModule.initPrototype AudioModule.VCAModule
-      , AudioModule.initPrototype AudioModule.EnvelopeModule
+    , archetypes =
+      [ AudioModule.initArchetype AudioModule.ConstantModule "const"
+      , AudioModule.initArchetype AudioModule.VCOModule "osc"
+      , AudioModule.initArchetype AudioModule.VCAModule "amp"
+      , AudioModule.initArchetype AudioModule.EnvelopeModule "env"
       ]
     , draggedId = Nothing
     , nextId = 0
@@ -48,9 +47,9 @@ init _ =
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
 type alias Model =
-  { audioModules : Dict Id AudioModule
+  { audioModules : Dict Id (AudioModule Msg)
   , draggedId : Maybe Id
-  , prototypes : List AudioModule.Prototype
+  , archetypes : List (AudioModule.Archetype Msg)
   , nextId : Id
   , drag : Draggable.State Id
   , lineActive : Bool
@@ -58,7 +57,7 @@ type alias Model =
   }
 
 type Msg
-  = CreateAndStartDrag AudioModule.Type (Draggable.Msg Id) AudioModule.Position
+  = CreateAndStartDrag (AudioModule.Archetype Msg) (Draggable.Msg Id) Position
   | OnDragStart Id
   | OnDragEnd
   | OnDragBy Draggable.Delta
@@ -74,7 +73,7 @@ type alias Line =
 
 type alias Id = Int
 
-with : Id -> AudioModule -> Model -> Model
+with : Id -> AudioModule Msg -> Model -> Model
 with id audioModule model =
   { model | audioModules = model.audioModules |> Dict.insert id audioModule }
 
@@ -94,7 +93,7 @@ withNextId : Model -> Model
 withNextId model =
   { model | nextId = model.nextId + 1 }
 
-mapAudioModule : (AudioModule -> AudioModule) -> Id -> Model -> Model
+mapAudioModule : (AudioModule Msg -> AudioModule Msg) -> Id -> Model -> Model
 mapAudioModule transform id model =
   case (Dict.get id model.audioModules) of
     Nothing ->
@@ -102,7 +101,11 @@ mapAudioModule transform id model =
     Just audioModule ->
       with id (transform audioModule) model
 
-maybeMapAudioModule : (AudioModule -> AudioModule) -> Maybe Id -> Model -> Model
+maybeMapAudioModule :
+  (AudioModule Msg -> AudioModule Msg)
+  -> Maybe Id
+  -> Model
+  -> Model
 maybeMapAudioModule transform maybeId model =
   case maybeId of
     Nothing ->
@@ -111,7 +114,7 @@ maybeMapAudioModule transform maybeId model =
       mapAudioModule transform id model
 
 mapAudioModuleWithCmd :
-  (AudioModule -> (AudioModule, Cmd msg))
+  (AudioModule Msg -> (AudioModule Msg, Cmd msg))
   -> Id
   -> Model
   -> (Model, Cmd msg)
@@ -150,9 +153,9 @@ subscriptions { drag, lineActive } =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
   case msg of
-    CreateAndStartDrag type_ dragMsg position ->
+    CreateAndStartDrag archetype dragMsg position ->
       model
-      |> insertNewAudioModule type_ position
+      |> insertNewAudioModule archetype position
       |> Draggable.update dragConfig dragMsg
     DragMsg dragMsg ->
       Draggable.update dragConfig dragMsg model
@@ -174,8 +177,7 @@ update msg model =
               , Cmd.none
               )
         _ ->
-          mapAudioModuleWithCmd
-            (AudioModule.update (AudioModuleDelegate id) moduleMsg) id model
+          mapAudioModuleWithCmd (AudioModule.update moduleMsg) id model
     EndpointMouseDownContinue point ->
       case (List.head model.lines) of
         Nothing ->
@@ -186,14 +188,17 @@ update msg model =
       Debug.log ("done: " ++ String.fromFloat x ++ ", " ++ String.fromFloat y)
         ( { model | lineActive = False } , Cmd.none )
 
-insertNewAudioModule : AudioModule.Type -> AudioModule.Position -> Model -> Model
-insertNewAudioModule type_ position model =
-  model
-  |> withNextId
-  |>( AudioModule.init type_ (String.fromInt model.nextId)
-      |> AudioModule.at position
-      |> with model.nextId
-    )
+insertNewAudioModule : AudioModule.Archetype Msg -> Position -> Model -> Model
+insertNewAudioModule archetype position model =
+  let
+    index = model.nextId
+  in
+    model
+    |> withNextId
+    |>( AudioModule.init (AudioModuleDelegate index) archetype index
+        |> AudioModule.at position
+        |> with model.nextId
+      )
 
 createLine : Point -> Line
 createLine point =
@@ -221,22 +226,22 @@ view : Model -> Html.Html Msg
 view model =
   Html.div
     [ Attributes.id "audio-module-map" ]
-    ( viewPrototypeBank model
+    ( viewArchetypeBank model
       :: viewConnectionMap model
       :: viewAudioModules model
     )
 
-viewPrototypeBank : Model -> Html.Html Msg
-viewPrototypeBank model =
+viewArchetypeBank : Model -> Html.Html Msg
+viewArchetypeBank model =
   Html.div
-    [ Attributes.id "prototype-bank" ]
+    [ Attributes.id "archetype-bank" ]
     ( List.map
-      (\proto ->
-          AudioModule.viewPrototype
-            [prototypeDragTrigger model.nextId proto.type_]
-            proto
+      (\archetype ->
+        AudioModule.viewArchetype
+          [ archetypeDragTrigger archetype model.nextId ]
+          archetype
       )
-      model.prototypes
+      model.archetypes
     )
 
 viewConnectionMap : Model -> Html.Html Msg
@@ -266,16 +271,13 @@ viewAudioModules model =
         then [Attributes.class "dragging"]
         else []
     viewModule (id, audioModule) =
-      AudioModule.view (AudioModuleDelegate id) (extraAttributes id) audioModule
+      AudioModule.view (extraAttributes id) audioModule
   in
     model.audioModules |> Dict.toList |> List.map viewModule
 
-prototypeDragTrigger : Id -> AudioModule.Type -> Html.Attribute Msg
-prototypeDragTrigger id type_ =
-  Draggable.customMouseTrigger
-    id
-    MouseEvent.positionDecoder
-    (CreateAndStartDrag type_)
+archetypeDragTrigger : AudioModule.Archetype Msg -> Id -> Html.Attribute Msg
+archetypeDragTrigger archetype index =
+  Draggable.customMouseTrigger index MouseEvent.positionDecoder (CreateAndStartDrag archetype)
 
 audioModuleDragTrigger : Id -> Html.Attribute Msg
 audioModuleDragTrigger id =

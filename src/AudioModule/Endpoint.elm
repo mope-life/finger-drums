@@ -3,6 +3,7 @@ module AudioModule.Endpoint exposing
   , Msg(..)
   , Direction(..)
   , init
+  , withDelegate
   , update
   , view
   )
@@ -15,16 +16,25 @@ import MouseEvent
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-init : String -> Direction -> String -> Endpoint
+init : String -> Direction -> String -> Endpoint msg
 init id direction label =
-  { id = id, direction = direction, label = label }
+  { id = id
+  , direction = direction
+  , label = label
+  , delegate = Nothing
+  }
+
+withDelegate : (Msg -> msg) -> Endpoint msg -> Endpoint msg
+withDelegate delegate endpoint =
+  { endpoint | delegate = Just delegate }
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
-type alias Endpoint =
+type alias Endpoint msg =
   { id : String
   , direction : Direction
   , label : String
+  , delegate : Maybe (Msg -> msg)
   }
 
 type Msg
@@ -36,18 +46,18 @@ type Direction
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
-update : (Msg -> msg) -> Msg -> Endpoint -> (Endpoint, Cmd msg)
-update delegate msg endpoint =
+update : Msg -> Endpoint msg -> (Endpoint msg, Cmd msg)
+update msg endpoint =
   case msg of
     MouseDown point ->
       (endpoint, Cmd.none)
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
-view : Maybe (Msg -> msg) -> Endpoint -> Html.Html msg
-view delegate endpoint =
+view : Endpoint msg -> Html.Html msg
+view endpoint =
   Html.div
-    ( Attributes.class "endpoint-wrapper" :: viewEvents delegate )
+    ( Attributes.class "endpoint-wrapper" :: viewEvents endpoint.delegate )
     [ Html.div
       [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ]
       [ ]

@@ -1,16 +1,15 @@
 module AudioModule exposing
   ( AudioModule
-  , Prototype
+  , Archetype
   , Msg(..)
   , Type(..)
-  , Position
   , init
-  , initPrototype
+  , initArchetype
   , at
   , translated
   , update
   , view
-  , viewPrototype
+  , viewArchetype
   )
 
 import Html
@@ -20,70 +19,78 @@ import AudioModule.Control as Control
 import AudioModule.Control exposing (Control)
 import AudioModule.Endpoint as Endpoint
 import AudioModule.Endpoint exposing (Endpoint)
-import MouseEvent
+import MouseEvent exposing (Position)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-init : Type -> String -> AudioModule
-init type_ name =
-  { type_  = type_
-  , position = (0, 0)
-  , name = name
-  , controls = initControls type_ name
-  , endpoints = initEndpoints type_ name
+init : (Msg -> msg) -> Archetype msg -> Int -> AudioModule msg
+init delegate archetype index =
+  let
+    id = archetype.id ++ "-" ++ (String.fromInt index)
+  in
+    { id = id
+    , delegate = delegate
+    , position = (0, 0)
+    , controls = initControls (Just delegate) archetype.type_ id
+    , endpoints = initEndpoints (Just delegate) archetype.type_ id
+    }
+
+initArchetype : Type -> String -> Archetype msg
+initArchetype type_ id =
+  { id = id
+  , type_ = type_
+  , controls = initControls Nothing type_ id
+  , endpoints = initEndpoints Nothing type_ id
   }
 
-initPrototype : Type -> Prototype
-initPrototype type_ =
-  { type_ = type_
-  , controls = initControls type_ "proto"
-  , endpoints = initEndpoints type_ "proto"
-  }
-
-initControls : Type -> String -> Array Control
-initControls type_ name =
-  case type_ of
+initControls : Maybe (Msg -> msg) -> Type -> String -> Array (Control msg)
+initControls delegate type_ id =
+  ( case type_ of
     ControllerModule ->
-      Array.empty
+      [ ]
     DestinationModule ->
-      Array.empty
+      [ ]
     ConstantModule ->
-      [ Control.initKnob ("const-" ++ name ++ "-knob")
-      ] |> Array.fromList
+      [ Control.initKnob (id ++ "-knob") ]
     VCOModule ->
-      let
-        group = "osc-" ++ name
-      in
-        [ Control.initControlGroup
-          [ Control.initRadio "sine" group (group ++ "-radio-sin")
-            |> Control.labeled "sin"
-          , Control.initRadio "square" group (group ++ "-radio-sqr")
-            |> Control.labeled "sqr"
-          , Control.initRadio "sawtooth" group (group ++ "-radio-saw")
-            |> Control.labeled "saw"
-          , Control.initRadio "triangle" group (group ++ "-radio-tri")
-            |> Control.labeled "tri"
-          ]
-          group
-        ] |> Array.fromList
+      [ Control.initControlGroup
+        [ Control.initRadio "sine" id (id ++ "-radio-sin")
+          |> Control.labeled "sin"
+        , Control.initRadio "square" id (id ++ "-radio-sqr")
+          |> Control.labeled "sqr"
+        , Control.initRadio "sawtooth" id (id ++ "-radio-saw")
+          |> Control.labeled "saw"
+        , Control.initRadio "triangle" id (id ++ "-radio-tri")
+          |> Control.labeled "tri"
+        ]
+        id
+      ]
     VCAModule ->
-      Array.empty
+      [ ]
     EnvelopeModule ->
-      let
-        group = "env-" ++ name
-      in
-        [ Control.initNumber (group ++ "-number-A")
-          |> Control.labeled "A"
-        , Control.initNumber (group ++ "-number-D")
-          |> Control.labeled "D"
-        , Control.initNumber (group ++ "-number-S")
-          |> Control.labeled "S"
-        , Control.initNumber (group ++ "-number-R")
-          |> Control.labeled "R"
-        ] |> Array.fromList
+      [ Control.initNumber (id ++ "-number-A")
+        |> Control.labeled "A"
+      , Control.initNumber (id ++ "-number-D")
+        |> Control.labeled "D"
+      , Control.initNumber (id ++ "-number-S")
+        |> Control.labeled "S"
+      , Control.initNumber (id ++ "-number-R")
+        |> Control.labeled "R"
+      ]
+  )
+  |> Array.fromList
+  |> Array.indexedMap (initControlDelegate delegate)
 
-initEndpoints : Type -> String -> Array Endpoint
-initEndpoints type_ name =
+initControlDelegate : Maybe (Msg -> msg) -> Int -> Control msg -> Control msg
+initControlDelegate delegate index =
+  case delegate of
+    Nothing ->
+      identity
+    Just d ->
+      Control.withDelegate (d << ControlDelegate index)
+
+initEndpoints : Maybe (Msg -> msg) -> Type -> String -> Array (Endpoint msg)
+initEndpoints delegate type_ name =
   ( case type_ of
       ControllerModule ->
         [ initEndpoint name Endpoint.Out "freq"
@@ -111,9 +118,19 @@ initEndpoints type_ name =
         , initEndpoint name Endpoint.In "trig"
         , initEndpoint name Endpoint.Out "cv"
         ]
-  ) |> Array.fromList
+  )
+  |> Array.fromList
+  |> Array.indexedMap (initEndpointDelegate delegate)
 
-initEndpoint : String -> Endpoint.Direction -> String -> Endpoint
+initEndpointDelegate : Maybe (Msg -> msg) -> Int -> Endpoint msg -> Endpoint msg
+initEndpointDelegate delegate index =
+  case delegate of
+    Nothing ->
+      identity
+    Just d ->
+      Endpoint.withDelegate (d << EndpointDelegate index)
+
+initEndpoint : String -> Endpoint.Direction -> String -> Endpoint msg
 initEndpoint name direction label =
   let
     midfix = case direction of
@@ -126,18 +143,19 @@ initEndpoint name direction label =
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
-type alias AudioModule =
-  { type_ : Type
+type alias AudioModule msg =
+  { id : String
+  , delegate : (Msg -> msg)
   , position : Position
-  , name : String
-  , controls : Array Control
-  , endpoints : Array Endpoint
+  , controls : Array (Control msg)
+  , endpoints : Array (Endpoint msg)
   }
 
-type alias Prototype =
-  { type_ : Type
-  , controls : Array Control
-  , endpoints : Array Endpoint
+type alias Archetype msg =
+  { id : String
+  , type_ : Type
+  , controls : Array (Control msg)
+  , endpoints : Array (Endpoint msg)
   }
 
 type Msg
@@ -152,13 +170,11 @@ type Type
   | VCAModule
   | EnvelopeModule
 
-type alias Position = MouseEvent.Position
-
-at : Position -> AudioModule -> AudioModule
+at : Position -> AudioModule msg -> AudioModule msg
 at position audioModule =
     { audioModule | position = position }
 
-translated : (Float, Float) -> AudioModule  -> AudioModule
+translated : (Float, Float) -> AudioModule msg -> AudioModule msg
 translated (dx, dy) audioModule =
   { audioModule
     | position = audioModule.position
@@ -166,17 +182,17 @@ translated (dx, dy) audioModule =
   }
 
 mapControlWithCmd :
-  (Control -> (Control, Cmd msg))
+  (Control msg -> (Control msg, Cmd msg))
   -> Int
-  -> AudioModule
-  -> (AudioModule, Cmd msg)
+  -> AudioModule msg
+  -> (AudioModule msg, Cmd msg)
 mapControlWithCmd transform index audioModule =
   case (Array.get index audioModule.controls) of
     Nothing ->
-      (audioModule, Cmd.none)
+      ( audioModule, Cmd.none )
     Just control ->
       let
-        (ctrl, cmd) = transform control
+        ( ctrl, cmd ) = transform control
       in
         ( { audioModule | controls = Array.set index ctrl audioModule.controls }
         , cmd
@@ -184,31 +200,31 @@ mapControlWithCmd transform index audioModule =
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
-update : (Msg -> msg) -> Msg -> AudioModule -> (AudioModule, Cmd msg)
-update delegate msg audioModule =
+update : Msg -> AudioModule msg -> (AudioModule msg, Cmd msg)
+update msg audioModule =
   case msg of
     ControlDelegate index controlMsg ->
       mapControlWithCmd
-        (Control.update (delegate << ControlDelegate index) controlMsg)
+        ( Control.update controlMsg )
         index
         audioModule
     _ ->
-      (audioModule, Cmd.none)
+      ( audioModule, Cmd.none )
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
-viewPrototype : List (Html.Attribute msg) -> Prototype -> Html.Html msg
-viewPrototype extraAttributes prototype =
+viewArchetype : List (Html.Attribute msg) -> Archetype msg -> Html.Html msg
+viewArchetype extraAttributes prototype =
   Html.div
     ( Attributes.class "module-wrapper" :: extraAttributes )
     [ Html.div [ Attributes.class "prototype-click-shield"] []
-    , viewEndpointBank Nothing prototype.endpoints Endpoint.In
-    , viewControlBank Nothing prototype.controls
-    , viewEndpointBank Nothing prototype.endpoints Endpoint.Out
+    , viewEndpointBank prototype.endpoints Endpoint.In
+    , viewControlBank prototype.controls
+    , viewEndpointBank prototype.endpoints Endpoint.Out
     ]
 
-view : (Msg -> msg) -> List (Html.Attribute msg) -> AudioModule -> Html.Html msg
-view delegate extraAttributes audioModule =
+view : List (Html.Attribute msg) -> AudioModule msg -> Html.Html msg
+view extraAttributes audioModule =
   let
     pxFromFloat = \float -> ( String.fromInt << round <| float ) ++ "px"
     (xpx, ypx) = Tuple.mapBoth pxFromFloat pxFromFloat audioModule.position
@@ -221,32 +237,19 @@ view delegate extraAttributes audioModule =
       ]
       extraAttributes
     )
-    [ viewEndpointBank (Just delegate) audioModule.endpoints Endpoint.In
-    , viewControlBank (Just delegate) audioModule.controls
-    , viewEndpointBank (Just delegate) audioModule.endpoints Endpoint.Out
+    [ viewEndpointBank audioModule.endpoints Endpoint.In
+    , viewControlBank audioModule.controls
+    , viewEndpointBank audioModule.endpoints Endpoint.Out
     ]
 
-viewControlBank : Maybe (Msg -> msg) -> Array Control -> Html.Html msg
-viewControlBank maybeDelegate controls =
-  let
-    controlView = case maybeDelegate of
-      Nothing ->
-        (\_ control ->
-          Control.view Nothing control)
-      Just delegate ->
-        (\index control ->
-          Control.view (Just <| delegate << ControlDelegate index) control)
-  in
-    Html.div
-      [ Attributes.class "control-bank" ]
-      ( Array.indexedMap controlView controls |> Array.toList )
+viewControlBank : Array (Control msg) -> Html.Html msg
+viewControlBank controls =
+  Html.div
+    [ Attributes.class "control-bank" ]
+    ( Array.map Control.view controls |> Array.toList )
 
-viewEndpointBank :
-  Maybe (Msg -> msg)
-  -> Array Endpoint
-  -> Endpoint.Direction
-  -> Html.Html msg
-viewEndpointBank delegate endpoints direction =
+viewEndpointBank : Array (Endpoint msg) -> Endpoint.Direction -> Html.Html msg
+viewEndpointBank endpoints direction =
   Html.div
     [ Attributes.class "endpoint-bank" ]
     ( ( Html.text <| case direction of
@@ -255,15 +258,7 @@ viewEndpointBank delegate endpoints direction =
       ) :: (
         endpoints
         |> Array.filter (\e -> e.direction == direction)
-        |> Array.indexedMap (viewEndpoint delegate)
+        |> Array.map Endpoint.view
         |> Array.toList
       )
     )
-
-viewEndpoint : Maybe (Msg -> msg) -> Int -> Endpoint -> Html.Html msg
-viewEndpoint delegate index endpoint =
-  case delegate of
-    Nothing ->
-      Endpoint.view Nothing endpoint
-    Just d ->
-      Endpoint.view (Just <| d << EndpointDelegate index) endpoint
