@@ -12,7 +12,9 @@ import Browser.Events
 
 import MouseEvent exposing (Point)
 import AudioModule exposing (AudioModule, Msg(..))
+import AudioModule.Endpoint exposing (Msg(..))
 import Svg.Attributes
+import AudioModule.Endpoint as Endpoint
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -162,13 +164,15 @@ update msg model =
       ( doDrag delta model, Cmd.none )
     AudioModuleDelegate id moduleMsg ->
       case moduleMsg of
-        AudioModule.EndpointMouseDown point ->
-          ( { model
-            | lineActive = True
-            , lines = createLine point :: model.lines
-            }
-          , Cmd.none
-          )
+        AudioModule.EndpointDelegate id2 endpointMsg ->
+          case endpointMsg of
+            Endpoint.MouseDown point ->
+              ( { model
+                | lineActive = True
+                , lines = createLine point :: model.lines
+                }
+              , Cmd.none
+              )
         _ ->
           mapAudioModuleWithCmd
             (AudioModule.update (AudioModuleDelegate id) moduleMsg) id model
@@ -180,7 +184,7 @@ update msg model =
           ( { model | lines = adjustLine point line :: Maybe.withDefault [] (List.tail model.lines) }, Cmd.none )
     EndpointMouseDownEnd (x, y) ->
       Debug.log ("done: " ++ String.fromFloat x ++ ", " ++ String.fromFloat y)
-      ( { model | lineActive = False } , Cmd.none )
+        ( { model | lineActive = False } , Cmd.none )
 
 insertNewAudioModule : AudioModule.Type -> AudioModule.Position -> Model -> Model
 insertNewAudioModule type_ position model =

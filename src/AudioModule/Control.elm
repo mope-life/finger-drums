@@ -1,10 +1,10 @@
 module AudioModule.Control exposing
   ( Control
   , Msg
-  , controlGroup
-  , radioControl
-  , knobControl
-  , numberControl
+  , initControlGroup
+  , initRadio
+  , initKnob
+  , initNumber
   , labeled
   , update
   , view
@@ -21,8 +21,8 @@ import Array exposing (Array)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-controlGroup : List Control -> String -> Control
-controlGroup controls id =
+initControlGroup : List Control -> String -> Control
+initControlGroup controls id =
   let
     initialValue = case (List.head controls) of
       Nothing ->
@@ -31,25 +31,25 @@ controlGroup controls id =
         control.value
   in
     ControlGroup ( Array.fromList controls )
-    |> genericControl id initialValue
+    |> initGeneric id initialValue
 
-radioControl : String -> String -> String -> Control
-radioControl value group id =
+initRadio : String -> String -> String -> Control
+initRadio value group id =
   Radio { group = group }
-  |> genericControl id value
+  |> initGeneric id value
 
-knobControl : String -> Control
-knobControl id =
+initKnob : String -> Control
+initKnob id =
   Knob { max = Nothing, min = Nothing, intervals = Nothing }
-  |> genericControl id "0"
+  |> initGeneric id "0"
 
-numberControl : String -> Control
-numberControl id =
+initNumber : String -> Control
+initNumber id =
   Number { max = Nothing, min = Nothing, step = Nothing }
-  |> genericControl id "0"
+  |> initGeneric id "0"
 
-genericControl : String -> String -> Input -> Control
-genericControl id initialValue input =
+initGeneric : String -> String -> Input -> Control
+initGeneric id initialValue input =
   { id = id
   , input = input
   , value = initialValue

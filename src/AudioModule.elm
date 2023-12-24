@@ -15,12 +15,12 @@ module AudioModule exposing
 
 import Html
 import Html.Attributes as Attributes
-import Html.Events as Events
 import Array exposing (Array)
-
-import MouseEvent
 import AudioModule.Control as Control
-import Json.Decode as Decode
+import AudioModule.Control exposing (Control)
+import AudioModule.Endpoint as Endpoint
+import AudioModule.Endpoint exposing (Endpoint)
+import MouseEvent
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -30,15 +30,17 @@ init type_ name =
   , position = (0, 0)
   , name = name
   , controls = initControls type_ name
+  , endpoints = initEndpoints type_ name
   }
 
 initPrototype : Type -> Prototype
 initPrototype type_ =
   { type_ = type_
   , controls = initControls type_ "proto"
+  , endpoints = initEndpoints type_ "proto"
   }
 
-initControls : Type -> String -> Array Control.Control
+initControls : Type -> String -> Array Control
 initControls type_ name =
   case type_ of
     ControllerModule ->
@@ -46,42 +48,81 @@ initControls type_ name =
     DestinationModule ->
       Array.empty
     ConstantModule ->
-      [ Control.knobControl ("const-" ++ name ++ "-knob")
-      ]
-      |> Array.fromList
+      [ Control.initKnob ("const-" ++ name ++ "-knob")
+      ] |> Array.fromList
     VCOModule ->
       let
         group = "osc-" ++ name
       in
-        [ Control.controlGroup
-          [ Control.radioControl "sine" group (group ++ "-radio-sin")
+        [ Control.initControlGroup
+          [ Control.initRadio "sine" group (group ++ "-radio-sin")
             |> Control.labeled "sin"
-          , Control.radioControl "square" group (group ++ "-radio-sqr")
+          , Control.initRadio "square" group (group ++ "-radio-sqr")
             |> Control.labeled "sqr"
-          , Control.radioControl "sawtooth" group (group ++ "-radio-saw")
+          , Control.initRadio "sawtooth" group (group ++ "-radio-saw")
             |> Control.labeled "saw"
-          , Control.radioControl "triangle" group (group ++ "-radio-tri")
+          , Control.initRadio "triangle" group (group ++ "-radio-tri")
             |> Control.labeled "tri"
           ]
           group
-        ]
-        |> Array.fromList
+        ] |> Array.fromList
     VCAModule ->
       Array.empty
     EnvelopeModule ->
       let
         group = "env-" ++ name
       in
-        [ Control.numberControl (group ++ "-number-A")
+        [ Control.initNumber (group ++ "-number-A")
           |> Control.labeled "A"
-        , Control.numberControl (group ++ "-number-D")
+        , Control.initNumber (group ++ "-number-D")
           |> Control.labeled "D"
-        , Control.numberControl (group ++ "-number-S")
+        , Control.initNumber (group ++ "-number-S")
           |> Control.labeled "S"
-        , Control.numberControl (group ++ "-number-R")
+        , Control.initNumber (group ++ "-number-R")
           |> Control.labeled "R"
+        ] |> Array.fromList
+
+initEndpoints : Type -> String -> Array Endpoint
+initEndpoints type_ name =
+  ( case type_ of
+      ControllerModule ->
+        [ initEndpoint name Endpoint.Out "freq"
+        , initEndpoint name Endpoint.Out "gate"
+        , initEndpoint name Endpoint.Out "trig"
         ]
-        |> Array.fromList
+      DestinationModule ->
+        [ initEndpoint name Endpoint.In "signal"
+        ]
+      ConstantModule ->
+        [ initEndpoint name Endpoint.Out "cv"
+        ]
+      VCOModule ->
+        [ initEndpoint name Endpoint.In "freq"
+        , initEndpoint name Endpoint.In "detune"
+        , initEndpoint name Endpoint.Out "signal"
+        ]
+      VCAModule ->
+        [ initEndpoint name Endpoint.In "signal"
+        , initEndpoint name Endpoint.In "cv"
+        , initEndpoint name Endpoint.Out "signal"
+        ]
+      EnvelopeModule ->
+        [ initEndpoint name Endpoint.In "gate"
+        , initEndpoint name Endpoint.In "trig"
+        , initEndpoint name Endpoint.Out "cv"
+        ]
+  ) |> Array.fromList
+
+initEndpoint : String -> Endpoint.Direction -> String -> Endpoint
+initEndpoint name direction label =
+  let
+    midfix = case direction of
+      Endpoint.In ->
+        "-endpoint-in-"
+      Endpoint.Out ->
+        "-endpoint-out-"
+  in
+    Endpoint.init (name ++ midfix ++ label) direction label
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
@@ -89,16 +130,18 @@ type alias AudioModule =
   { type_ : Type
   , position : Position
   , name : String
-  , controls : Array Control.Control
+  , controls : Array Control
+  , endpoints : Array Endpoint
   }
 
 type alias Prototype =
   { type_ : Type
-  , controls : Array Control.Control
+  , controls : Array Control
+  , endpoints : Array Endpoint
   }
 
 type Msg
-  = EndpointMouseDown MouseEvent.Point
+  = EndpointDelegate Int Endpoint.Msg
   | ControlDelegate Int Control.Msg
 
 type Type
@@ -108,10 +151,6 @@ type Type
   | VCOModule
   | VCAModule
   | EnvelopeModule
-
-type Direction
-  = In
-  | Out
 
 type alias Position = MouseEvent.Position
 
@@ -127,7 +166,7 @@ translated (dx, dy) audioModule =
   }
 
 mapControlWithCmd :
-  (Control.Control -> (Control.Control, Cmd msg))
+  (Control -> (Control, Cmd msg))
   -> Int
   -> AudioModule
   -> (AudioModule, Cmd msg)
@@ -163,9 +202,9 @@ viewPrototype extraAttributes prototype =
   Html.div
     ( Attributes.class "module-wrapper" :: extraAttributes )
     [ Html.div [ Attributes.class "prototype-click-shield"] []
-    , viewEndpointBank Nothing prototype.type_ In
+    , viewEndpointBank Nothing prototype.endpoints Endpoint.In
     , viewControlBank Nothing prototype.controls
-    , viewEndpointBank Nothing prototype.type_ Out
+    , viewEndpointBank Nothing prototype.endpoints Endpoint.Out
     ]
 
 view : (Msg -> msg) -> List (Html.Attribute msg) -> AudioModule -> Html.Html msg
@@ -182,12 +221,12 @@ view delegate extraAttributes audioModule =
       ]
       extraAttributes
     )
-    [ viewEndpointBank (Just delegate) audioModule.type_ In
+    [ viewEndpointBank (Just delegate) audioModule.endpoints Endpoint.In
     , viewControlBank (Just delegate) audioModule.controls
-    , viewEndpointBank (Just delegate) audioModule.type_ Out
+    , viewEndpointBank (Just delegate) audioModule.endpoints Endpoint.Out
     ]
 
-viewControlBank : Maybe (Msg -> msg) -> Array Control.Control -> Html.Html msg
+viewControlBank : Maybe (Msg -> msg) -> Array Control -> Html.Html msg
 viewControlBank maybeDelegate controls =
   let
     controlView = case maybeDelegate of
@@ -202,81 +241,29 @@ viewControlBank maybeDelegate controls =
       [ Attributes.class "control-bank" ]
       ( Array.indexedMap controlView controls |> Array.toList )
 
-viewEndpointBank : Maybe (Msg -> msg) -> Type -> Direction -> Html.Html msg
-viewEndpointBank delegate type_ direction =
-  let
-    ( elements, label ) = case direction of
-      In ->
-        ( viewEndpointsIn delegate type_, "in:" )
-      Out ->
-        ( viewEndpointsOut delegate type_, "out:" )
-    div = Html.div [ Attributes.class "endpoint-bank" ]
-  in
-    if List.isEmpty elements
-      then div []
-      else div <| Html.text label :: elements
+viewEndpointBank :
+  Maybe (Msg -> msg)
+  -> Array Endpoint
+  -> Endpoint.Direction
+  -> Html.Html msg
+viewEndpointBank delegate endpoints direction =
+  Html.div
+    [ Attributes.class "endpoint-bank" ]
+    ( ( Html.text <| case direction of
+          Endpoint.In -> "in:"
+          Endpoint.Out -> "out:"
+      ) :: (
+        endpoints
+        |> Array.filter (\e -> e.direction == direction)
+        |> Array.indexedMap (viewEndpoint delegate)
+        |> Array.toList
+      )
+    )
 
-viewEndpointsIn : Maybe (Msg -> msg) -> Type -> List (Html.Html msg)
-viewEndpointsIn delegate type_ =
-  case type_ of
-    ControllerModule ->
-      []
-    DestinationModule ->
-      [ viewEndpoint delegate "signal" ]
-    ConstantModule ->
-      []
-    VCOModule ->
-      [ viewEndpoint delegate "freq"
-      , viewEndpoint delegate "detune"
-      ]
-    VCAModule ->
-      [ viewEndpoint delegate "signal"
-      , viewEndpoint delegate "cv"
-      ]
-    EnvelopeModule ->
-      [ viewEndpoint delegate "gate"
-      , viewEndpoint delegate "trig"
-      ]
-
-viewEndpointsOut : Maybe (Msg -> msg) -> Type -> List (Html.Html msg)
-viewEndpointsOut delegate type_ =
-  case type_ of
-    ControllerModule ->
-      [ viewEndpoint delegate "freq"
-      , viewEndpoint delegate "gate"
-      , viewEndpoint delegate "trig"
-      ]
-    DestinationModule ->
-      []
-    ConstantModule ->
-      [ viewEndpoint delegate "cv" ]
-    VCOModule ->
-      [ viewEndpoint delegate "signal" ]
-    VCAModule ->
-      [ viewEndpoint delegate "signal" ]
-    EnvelopeModule ->
-      [ viewEndpoint delegate "level" ]
-
-viewEndpoint : Maybe (Msg -> msg) -> String -> Html.Html msg
-viewEndpoint maybeDelegate label =
-  let
-    events = case maybeDelegate of
-      Nothing ->
-        []
-      Just delegate ->
-        [ MouseEvent.pointMessageDecoder (delegate << EndpointMouseDown)
-          |> Decode.andThen
-            (\m -> Decode.succeed
-              { message = m
-              , stopPropagation = True
-              , preventDefault = True
-              }
-            )
-          |> Events.custom "mousedown"
-        ]
-  in
-    Html.div
-      ( Attributes.class "endpoint-wrapper" :: events )
-      [ Html.div [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ] []
-      , Html.label [ Attributes.class "endpoint-label" ] [ Html.text label ]
-      ]
+viewEndpoint : Maybe (Msg -> msg) -> Int -> Endpoint -> Html.Html msg
+viewEndpoint delegate index endpoint =
+  case delegate of
+    Nothing ->
+      Endpoint.view Nothing endpoint
+    Just d ->
+      Endpoint.view (Just <| d << EndpointDelegate index) endpoint
