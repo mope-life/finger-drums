@@ -31,7 +31,7 @@ body {
   height: 100%;
   width: 100%;
   pointer-events: none;
-  z-index: 2;
+  z-index: 10000;
 }
 
 #connection-map line {
@@ -107,14 +107,14 @@ body {
   box-sizing: content-box;
 }
 
+.endpoint-jack:hover {
+  border-color: var(--wire-hover-color);
+}
+
 .endpoint-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.endpoint-socket:hover {
-  border-color: var(--wire-hover-color);
 }
 
 .endpoint-bank {

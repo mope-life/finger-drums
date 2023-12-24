@@ -1,7 +1,7 @@
 module AudioModule exposing
   ( AudioModule
   , Prototype
-  , Msg
+  , Msg(..)
   , Type(..)
   , Position
   , init
@@ -16,9 +16,11 @@ module AudioModule exposing
 import Html
 import Html.Attributes as Attributes
 import Html.Events as Events
-import AudioModule.Control as Control
 import Array exposing (Array)
-import Svg.Attributes exposing (direction)
+
+import MouseEvent
+import AudioModule.Control as Control
+import Json.Decode as Decode
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -96,8 +98,8 @@ type alias Prototype =
   }
 
 type Msg
-  = EndpointClickedPlaceholder
-  | Delegate Int Control.Msg
+  = EndpointMouseDown MouseEvent.Point
+  | ControlDelegate Int Control.Msg
 
 type Type
   = ControllerModule
@@ -111,7 +113,7 @@ type Direction
   = In
   | Out
 
-type alias Position = (Float, Float)
+type alias Position = MouseEvent.Position
 
 at : Position -> AudioModule -> AudioModule
 at position audioModule =
@@ -146,13 +148,13 @@ mapControlWithCmd transform index audioModule =
 update : (Msg -> msg) -> Msg -> AudioModule -> (AudioModule, Cmd msg)
 update delegate msg audioModule =
   case msg of
-    EndpointClickedPlaceholder ->
-      Debug.log "caught endpoint placeholder" (audioModule, Cmd.none)
-    Delegate index controlMsg ->
+    ControlDelegate index controlMsg ->
       mapControlWithCmd
-        (Control.update (delegate << Delegate index) controlMsg)
+        (Control.update (delegate << ControlDelegate index) controlMsg)
         index
         audioModule
+    _ ->
+      (audioModule, Cmd.none)
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
@@ -194,7 +196,7 @@ viewControlBank maybeDelegate controls =
           Control.view Nothing control)
       Just delegate ->
         (\index control ->
-          Control.view (Just <| delegate << Delegate index) control)
+          Control.view (Just <| delegate << ControlDelegate index) control)
   in
     Html.div
       [ Attributes.class "control-bank" ]
@@ -262,7 +264,16 @@ viewEndpoint maybeDelegate label =
       Nothing ->
         []
       Just delegate ->
-        [ Events.onClick (delegate EndpointClickedPlaceholder) ]
+        [ MouseEvent.pointMessageDecoder (delegate << EndpointMouseDown)
+          |> Decode.andThen
+            (\m -> Decode.succeed
+              { message = m
+              , stopPropagation = True
+              , preventDefault = True
+              }
+            )
+          |> Events.custom "mousedown"
+        ]
   in
     Html.div
       ( Attributes.class "endpoint-wrapper" :: events )

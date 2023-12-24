@@ -6,11 +6,13 @@ import Html.Attributes as Attributes
 import Svg
 import Dict exposing (Dict)
 import Platform.Cmd as Cmd
-import Json.Decode as Decode
 import Draggable
 import Draggable.Events
-import Html.Attributes as Attributes
-import AudioModule exposing (AudioModule)
+import Browser.Events
+
+import MouseEvent exposing (Point)
+import AudioModule exposing (AudioModule, Msg(..))
+import Svg.Attributes
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -35,6 +37,8 @@ init _ =
     , draggedId = Nothing
     , nextId = 0
     , drag = Draggable.init
+    , lineActive = False
+    , lines = []
     }
     , Cmd.none
   )
@@ -47,6 +51,8 @@ type alias Model =
   , prototypes : List AudioModule.Prototype
   , nextId : Id
   , drag : Draggable.State Id
+  , lineActive : Bool
+  , lines : List Line
   }
 
 type Msg
@@ -56,6 +62,13 @@ type Msg
   | OnDragBy Draggable.Delta
   | DragMsg (Draggable.Msg Id)
   | AudioModuleDelegate Id AudioModule.Msg
+  | EndpointMouseDownContinue Point
+  | EndpointMouseDownEnd Point
+
+type alias Line =
+  { endOne : Point
+  , endTwo : Point
+  }
 
 type alias Id = Int
 
@@ -113,8 +126,22 @@ mapAudioModuleWithCmd transform id model =
 --------------------------------------------------------------------------------
 -- Subscriptions ---------------------------------------------------------------
 subscriptions : Model -> Sub Msg
-subscriptions { drag } =
-  Draggable.subscriptions DragMsg drag
+subscriptions { drag, lineActive } =
+  Sub.batch
+  [ Draggable.subscriptions DragMsg drag
+  , if lineActive
+    then
+      EndpointMouseDownContinue
+      |> Browser.Events.onMouseMove << MouseEvent.pointMessageDecoder
+    else
+      Sub.none
+  , if lineActive
+    then
+      EndpointMouseDownEnd
+      |> Browser.Events.onMouseUp << MouseEvent.pointMessageDecoder
+    else
+      Sub.none
+  ]
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
@@ -134,17 +161,43 @@ update msg model =
     OnDragBy delta ->
       ( doDrag delta model, Cmd.none )
     AudioModuleDelegate id moduleMsg ->
-      mapAudioModuleWithCmd
-        (AudioModule.update (AudioModuleDelegate id) moduleMsg) id model
+      case moduleMsg of
+        AudioModule.EndpointMouseDown point ->
+          ( { model
+            | lineActive = True
+            , lines = createLine point :: model.lines
+            }
+          , Cmd.none
+          )
+        _ ->
+          mapAudioModuleWithCmd
+            (AudioModule.update (AudioModuleDelegate id) moduleMsg) id model
+    EndpointMouseDownContinue point ->
+      case (List.head model.lines) of
+        Nothing ->
+          ( model, Cmd.none )
+        Just line ->
+          ( { model | lines = adjustLine point line :: Maybe.withDefault [] (List.tail model.lines) }, Cmd.none )
+    EndpointMouseDownEnd (x, y) ->
+      Debug.log ("done: " ++ String.fromFloat x ++ ", " ++ String.fromFloat y)
+      ( { model | lineActive = False } , Cmd.none )
 
 insertNewAudioModule : AudioModule.Type -> AudioModule.Position -> Model -> Model
 insertNewAudioModule type_ position model =
   model
   |> withNextId
   |>( AudioModule.init type_ (String.fromInt model.nextId)
-    |> AudioModule.at position
-    |> with model.nextId
+      |> AudioModule.at position
+      |> with model.nextId
     )
+
+createLine : Point -> Line
+createLine point =
+  { endOne = point, endTwo = point }
+
+adjustLine : Point -> Line -> Line
+adjustLine point line =
+  { line | endTwo = point }
 
 doDrag : Draggable.Delta -> Model -> Model
 doDrag delta model =
@@ -174,25 +227,40 @@ viewPrototypeBank model =
   Html.div
     [ Attributes.id "prototype-bank" ]
     ( List.map
-      (\proto -> AudioModule.viewPrototype
-        [prototypeDragTrigger model.nextId proto.type_]
-        proto
+      (\proto ->
+          AudioModule.viewPrototype
+            [prototypeDragTrigger model.nextId proto.type_]
+            proto
       )
       model.prototypes
     )
 
 viewConnectionMap : Model -> Html.Html Msg
-viewConnectionMap _ =
-  Svg.svg [Attributes.id "connection-map"] []
+viewConnectionMap model =
+  Svg.svg
+    [Attributes.id "connection-map"]
+    ( List.map
+      (\{ endOne, endTwo } ->
+          Svg.line
+            [ Svg.Attributes.strokeLinecap "round"
+            , Svg.Attributes.x1 (String.fromFloat << Tuple.first <| endOne)
+            , Svg.Attributes.y1 (String.fromFloat << Tuple.second <| endOne)
+            , Svg.Attributes.x2 (String.fromFloat << Tuple.first <| endTwo)
+            , Svg.Attributes.y2 (String.fromFloat << Tuple.second <| endTwo)
+            ]
+            []
+      )
+      model.lines
+    )
 
 viewAudioModules : Model -> List (Html.Html Msg)
 viewAudioModules model =
   let
     extraAttributes id =
       audioModuleDragTrigger id ::
-      if audioModuleIsDragged id model
-      then [Attributes.class "dragging"]
-      else []
+        if audioModuleIsDragged id model
+        then [Attributes.class "dragging"]
+        else []
     viewModule (id, audioModule) =
       AudioModule.view (AudioModuleDelegate id) (extraAttributes id) audioModule
   in
@@ -200,7 +268,10 @@ viewAudioModules model =
 
 prototypeDragTrigger : Id -> AudioModule.Type -> Html.Attribute Msg
 prototypeDragTrigger id type_ =
-  Draggable.customMouseTrigger id positionDecoder (CreateAndStartDrag type_)
+  Draggable.customMouseTrigger
+    id
+    MouseEvent.positionDecoder
+    (CreateAndStartDrag type_)
 
 audioModuleDragTrigger : Id -> Html.Attribute Msg
 audioModuleDragTrigger id =
@@ -213,28 +284,3 @@ audioModuleIsDragged id model =
       False
     Just bool ->
       bool
-
-positionDecoder : Decode.Decoder AudioModule.Position
-positionDecoder =
-  Decode.map positionFromClickInfo mouseDownDecoder
-
-mouseDownDecoder : Decode.Decoder ClickInfo
-mouseDownDecoder =
-  Decode.map4 ClickInfo
-    ( Decode.field "offsetX" Decode.float)
-    ( Decode.field "offsetY" Decode.float)
-    ( Decode.field "pageX" Decode.float)
-    ( Decode.field "pageY" Decode.float)
-
-positionFromClickInfo : ClickInfo -> AudioModule.Position
-positionFromClickInfo clickInfo =
-  ( clickInfo.pageX - clickInfo.offsetX
-  , clickInfo.pageY - clickInfo.offsetY
-  )
-
-type alias ClickInfo =
-  { offsetX : Float
-  , offsetY : Float
-  , pageX : Float
-  , pageY : Float
-  }
