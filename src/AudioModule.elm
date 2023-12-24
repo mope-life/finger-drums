@@ -234,6 +234,7 @@ view extraAttributes audioModule =
       [ Attributes.style "left" xpx
       , Attributes.style "top" ypx
       , Attributes.class "module-wrapper"
+      , Attributes.id audioModule.id
       ]
       extraAttributes
     )
@@ -250,15 +251,20 @@ viewControlBank controls =
 
 viewEndpointBank : Array (Endpoint msg) -> Endpoint.Direction -> Html.Html msg
 viewEndpointBank endpoints direction =
-  Html.div
-    [ Attributes.class "endpoint-bank" ]
-    ( ( Html.text <| case direction of
-          Endpoint.In -> "in:"
-          Endpoint.Out -> "out:"
-      ) :: (
-        endpoints
-        |> Array.filter (\e -> e.direction == direction)
-        |> Array.map Endpoint.view
-        |> Array.toList
+  let
+    elements =
+      endpoints
+      |> Array.filter (\e -> e.direction == direction)
+      |> Array.map Endpoint.view
+      |> Array.toList
+  in
+    Html.div
+      [ Attributes.class "endpoint-bank" ]
+      ( if List.isEmpty elements
+        then []
+        else
+          ( Html.text <| case direction of
+              Endpoint.In -> "in:"
+              Endpoint.Out -> "out:"
+          ) :: elements
       )
-    )

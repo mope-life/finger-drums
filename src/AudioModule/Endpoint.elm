@@ -57,7 +57,11 @@ update msg endpoint =
 view : Endpoint msg -> Html.Html msg
 view endpoint =
   Html.div
-    ( Attributes.class "endpoint-wrapper" :: viewEvents endpoint.delegate )
+    ( [ Attributes.class "endpoint-wrapper"
+      , Attributes.id endpoint.id
+      ]
+      ++ viewEvents endpoint.delegate
+    )
     [ Html.div
       [ Attributes.class "endpoint-jack", Attributes.class "grabbable" ]
       [ ]
