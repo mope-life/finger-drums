@@ -6,7 +6,7 @@
   --module-background: #777;
   --module-border: 5px outset #999;
   --label-font: 1em monospace;
-  --archetype-bank-background: #bfbfbf;
+  --prototype-bank-background: #bfbfbf;
 
   --number-input-color: lime;
   --number-input-background-color: black;
@@ -52,8 +52,8 @@ body {
   width: 100%;
 }
 
-#archetype-bank {
-  background: var(--archetype-bank-background);
+#prototype-bank {
+  background: var(--prototype-bank-background);
   height: 100%;
   position: absolute;
   display: grid;
@@ -63,22 +63,22 @@ body {
   overflow: scroll;
 }
 
-#archetype-bank > .module-wrapper {
+#prototype-bank > .audio-module {
   justify-self: center;
   align-self: start;
   position: relative;
 }
 
-.archetype-click-shield {
+.prototype-click-shield {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
+  width: calc(100% + 10px);
+  height: calc(100% + 10px);
+  top: -5px;
+  left: -5px;
   z-index: 10;
 }
 
-.module-wrapper {
+.audio-module {
   background: var(--module-background);
   border: var(--module-border);
   display: flex;
@@ -86,12 +86,12 @@ body {
   cursor: grab;
 }
 
-#audio-module-map > .module-wrapper {
+#audio-module-map > .audio-module {
   position: absolute;
   z-index: 100;
 }
 
-.module-wrapper.dragging {
+.audio-module.dragging {
   cursor: grabbing;
   z-index: 1000 !important;
 }

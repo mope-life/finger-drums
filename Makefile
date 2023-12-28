@@ -10,6 +10,7 @@ sources:=$(patsubst %,$(srcdir)/%, \
 # these include .elm files that don't actually produce a Program
 dependencies:=$(patsubst %,$(srcdir)/%, \
     AudioModule.elm                     \
+    MouseEvent.elm						\
     AudioModule/Control.elm             \
     AudioModule/Endpoint.elm            \
 )

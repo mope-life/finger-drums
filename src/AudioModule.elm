@@ -1,15 +1,19 @@
 module AudioModule exposing
   ( AudioModule
-  , Archetype
+  , Translators
+  , Prototype
+  , Position
   , Msg(..)
   , Type(..)
   , init
-  , initArchetype
+  , initPrototype
   , at
   , translated
+  , dragged
+  , notDragged
   , update
   , view
-  , viewArchetype
+  , viewPrototype
   )
 
 import Html
@@ -19,148 +23,168 @@ import AudioModule.Control as Control
 import AudioModule.Control exposing (Control)
 import AudioModule.Endpoint as Endpoint
 import AudioModule.Endpoint exposing (Endpoint)
-import MouseEvent exposing (Position)
+import MouseEvent
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-init : (Msg -> msg) -> Archetype msg -> Int -> AudioModule msg
-init delegate archetype index =
+init : Translators msg -> Type -> String -> AudioModule msg
+init translators type_ id =
   let
-    id = archetype.id ++ "-" ++ (String.fromInt index)
+    endpointInitializer = ( initEndpoint translators.endpointTranslators id )
   in
     { id = id
-    , delegate = delegate
     , position = (0, 0)
-    , controls = initControls (Just delegate) archetype.type_ id
-    , endpoints = initEndpoints (Just delegate) archetype.type_ id
+    , dragged = False
+    , translators = translators
+    , controls = initControls translators type_ id
+    , endpoints = initEndpoints endpointInitializer type_
     }
 
-initArchetype : Type -> String -> Archetype msg
-initArchetype type_ id =
-  { id = id
-  , type_ = type_
-  , controls = initControls Nothing type_ id
-  , endpoints = initEndpoints Nothing type_ id
-  }
+initPrototype : Translators msg -> Type -> String -> Prototype msg
+initPrototype translators type_ id =
+  let
+    endpointInitializer = ( initEndpoint translators.endpointTranslators id )
+  in
+    { id = id
+    , type_ = type_
+    , translators = translators
+    , controls = initControls translators type_ id
+    , endpoints = initEndpoints endpointInitializer type_
+    }
 
-initControls : Maybe (Msg -> msg) -> Type -> String -> Array (Control msg)
-initControls delegate type_ id =
+initControls : Translators msg -> Type -> String -> Array (Control msg)
+initControls translators type_ id =
   ( case type_ of
     ControllerModule ->
       [ ]
     DestinationModule ->
       [ ]
     ConstantModule ->
-      [ Control.initKnob (id ++ "-knob") ]
+      [ ( Control.initKnob (id ++ "-knob"), Nothing) ]
     VCOModule ->
-      [ Control.initControlGroup
-        [ Control.initRadio "sine" id (id ++ "-radio-sin")
-          |> Control.labeled "sin"
-        , Control.initRadio "square" id (id ++ "-radio-sqr")
-          |> Control.labeled "sqr"
-        , Control.initRadio "sawtooth" id (id ++ "-radio-saw")
-          |> Control.labeled "saw"
-        , Control.initRadio "triangle" id (id ++ "-radio-tri")
-          |> Control.labeled "tri"
-        ]
-        id
+      [ (\t -> Control.initControlGroup
+          [ Control.initRadio "sine" id (id ++ "-radio-sin") t
+            |> Control.labeled "sin"
+          , Control.initRadio "square" id (id ++ "-radio-sqr") t
+            |> Control.labeled "sqr"
+          , Control.initRadio "sawtooth" id (id ++ "-radio-saw") t
+            |> Control.labeled "saw"
+          , Control.initRadio "triangle" id (id ++ "-radio-tri") t
+            |> Control.labeled "tri"
+          ] id t
+        , Nothing
+        )
       ]
     VCAModule ->
       [ ]
     EnvelopeModule ->
-      [ Control.initNumber (id ++ "-number-A")
-        |> Control.labeled "A"
-      , Control.initNumber (id ++ "-number-D")
-        |> Control.labeled "D"
-      , Control.initNumber (id ++ "-number-S")
-        |> Control.labeled "S"
-      , Control.initNumber (id ++ "-number-R")
-        |> Control.labeled "R"
+      [ ( Control.initNumber (id ++ "-number-A"), Just "A" )
+      , ( Control.initNumber (id ++ "-number-D"), Just "D" )
+      , ( Control.initNumber (id ++ "-number-S"), Just "S" )
+      , ( Control.initNumber (id ++ "-number-R"), Just "R" )
+      ]
+  )
+  |> List.indexedMap
+    (\index (ctrl, label) ->
+      ctrl
+      { loopback = translators.loopback << ControlDelegate index
+      , input = translators.loopback << Input index
+      }
+      |> case label of
+        Nothing -> identity
+        Just str -> Control.labeled str
+    )
+  |> Array.fromList
+
+initEndpoints :
+  (Endpoint.Direction -> String -> Endpoint msg)
+  -> Type
+  -> Array (Endpoint msg)
+initEndpoints initializer type_ =
+  ( case type_ of
+    ControllerModule ->
+      [ initializer Endpoint.Out "freq"
+      , initializer Endpoint.Out "gate"
+      , initializer Endpoint.Out "trig"
+      ]
+    DestinationModule ->
+      [ initializer Endpoint.In "signal"
+      ]
+    ConstantModule ->
+      [ initializer Endpoint.Out "cv"
+      ]
+    VCOModule ->
+      [ initializer Endpoint.In "freq"
+      , initializer Endpoint.In "detune"
+      , initializer Endpoint.Out "signal"
+      ]
+    VCAModule ->
+      [ initializer Endpoint.In "signal"
+      , initializer Endpoint.In "cv"
+      , initializer Endpoint.Out "signal"
+      ]
+    EnvelopeModule ->
+      [ initializer Endpoint.In "gate"
+      , initializer Endpoint.In "trig"
+      , initializer Endpoint.Out "cv"
       ]
   )
   |> Array.fromList
-  |> Array.indexedMap (initControlDelegate delegate)
 
-initControlDelegate : Maybe (Msg -> msg) -> Int -> Control msg -> Control msg
-initControlDelegate delegate index =
-  case delegate of
-    Nothing ->
-      identity
-    Just d ->
-      Control.withDelegate (d << ControlDelegate index)
-
-initEndpoints : Maybe (Msg -> msg) -> Type -> String -> Array (Endpoint msg)
-initEndpoints delegate type_ name =
-  ( case type_ of
-      ControllerModule ->
-        [ initEndpoint name Endpoint.Out "freq"
-        , initEndpoint name Endpoint.Out "gate"
-        , initEndpoint name Endpoint.Out "trig"
-        ]
-      DestinationModule ->
-        [ initEndpoint name Endpoint.In "signal"
-        ]
-      ConstantModule ->
-        [ initEndpoint name Endpoint.Out "cv"
-        ]
-      VCOModule ->
-        [ initEndpoint name Endpoint.In "freq"
-        , initEndpoint name Endpoint.In "detune"
-        , initEndpoint name Endpoint.Out "signal"
-        ]
-      VCAModule ->
-        [ initEndpoint name Endpoint.In "signal"
-        , initEndpoint name Endpoint.In "cv"
-        , initEndpoint name Endpoint.Out "signal"
-        ]
-      EnvelopeModule ->
-        [ initEndpoint name Endpoint.In "gate"
-        , initEndpoint name Endpoint.In "trig"
-        , initEndpoint name Endpoint.Out "cv"
-        ]
-  )
-  |> Array.fromList
-  |> Array.indexedMap (initEndpointDelegate delegate)
-
-initEndpointDelegate : Maybe (Msg -> msg) -> Int -> Endpoint msg -> Endpoint msg
-initEndpointDelegate delegate index =
-  case delegate of
-    Nothing ->
-      identity
-    Just d ->
-      Endpoint.withDelegate (d << EndpointDelegate index)
-
-initEndpoint : String -> Endpoint.Direction -> String -> Endpoint msg
-initEndpoint name direction label =
+initEndpoint :
+  Endpoint.Translators msg
+  -> String
+  -> Endpoint.Direction
+  -> String
+  -> Endpoint msg
+initEndpoint translators parentId direction label =
   let
     midfix = case direction of
       Endpoint.In ->
         "-endpoint-in-"
       Endpoint.Out ->
         "-endpoint-out-"
+    endpointId = (parentId ++ midfix ++ label)
   in
-    Endpoint.init (name ++ midfix ++ label) direction label
+    Endpoint.init translators endpointId direction label
+
+dragged : AudioModule msg -> AudioModule msg
+dragged audioModule =
+  { audioModule | dragged = True }
+
+notDragged : AudioModule msg -> AudioModule msg
+notDragged audioModule =
+  { audioModule | dragged = False }
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
 type alias AudioModule msg =
   { id : String
-  , delegate : (Msg -> msg)
   , position : Position
+  , dragged : Bool
+  , translators : Translators msg
   , controls : Array (Control msg)
   , endpoints : Array (Endpoint msg)
   }
 
-type alias Archetype msg =
+type alias Prototype msg =
   { id : String
   , type_ : Type
+  , translators : Translators msg
   , controls : Array (Control msg)
   , endpoints : Array (Endpoint msg)
+  }
+
+type alias Translators msg =
+  { loopback : Msg -> msg
+  , mouseDown : MouseEvent.MouseInfo -> msg
+  , endpointTranslators : Endpoint.Translators msg
   }
 
 type Msg
-  = EndpointDelegate Int Endpoint.Msg
-  | ControlDelegate Int Control.Msg
+  = ControlDelegate Int Control.Msg
+  | Input Int String
+  | Ignore MouseEvent.MouseInfo
 
 type Type
   = ControllerModule
@@ -169,6 +193,8 @@ type Type
   | VCOModule
   | VCAModule
   | EnvelopeModule
+
+type alias Position = (Float, Float)
 
 at : Position -> AudioModule msg -> AudioModule msg
 at position audioModule =
@@ -181,63 +207,67 @@ translated (dx, dy) audioModule =
     |> Tuple.mapBoth (\x -> x + dx) (\y -> y + dy)
   }
 
-mapControlWithCmd :
-  (Control msg -> (Control msg, Cmd msg))
-  -> Int
-  -> AudioModule msg
-  -> (AudioModule msg, Cmd msg)
-mapControlWithCmd transform index audioModule =
-  case (Array.get index audioModule.controls) of
-    Nothing ->
-      ( audioModule, Cmd.none )
-    Just control ->
-      let
-        ( ctrl, cmd ) = transform control
-      in
-        ( { audioModule | controls = Array.set index ctrl audioModule.controls }
-        , cmd
-        )
-
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
 update : Msg -> AudioModule msg -> (AudioModule msg, Cmd msg)
 update msg audioModule =
   case msg of
     ControlDelegate index controlMsg ->
-      mapControlWithCmd
-        ( Control.update controlMsg )
-        index
-        audioModule
+      updateControl index controlMsg audioModule
     _ ->
       ( audioModule, Cmd.none )
 
+updateControl :
+  Int
+  -> Control.Msg
+  -> AudioModule msg
+  -> (AudioModule msg, Cmd msg)
+updateControl index controlMsg audioModule =
+  case (Array.get index audioModule.controls) of
+    Nothing ->
+      ( audioModule, Cmd.none )
+    Just control ->
+      let
+        ( ctrl, cmd ) = Control.update controlMsg control
+      in
+        ( { audioModule | controls = Array.set index ctrl audioModule.controls }
+        , cmd
+        )
+
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
-viewArchetype : List (Html.Attribute msg) -> Archetype msg -> Html.Html msg
-viewArchetype extraAttributes prototype =
+viewPrototype : Prototype msg -> Html.Html msg
+viewPrototype prototype =
   Html.div
-    ( Attributes.class "module-wrapper" :: extraAttributes )
-    [ Html.div [ Attributes.class "prototype-click-shield"] []
+    [ Attributes.class "audio-module"
+    , Attributes.id (prototype.id ++ "-proto")
+    ]
+    [ Html.div
+      [ Attributes.class "prototype-click-shield"
+      , MouseEvent.onCustom "mousedown" prototype.translators.mouseDown
+      ]
+      []
     , viewEndpointBank prototype.endpoints Endpoint.In
     , viewControlBank prototype.controls
     , viewEndpointBank prototype.endpoints Endpoint.Out
     ]
 
-view : List (Html.Attribute msg) -> AudioModule msg -> Html.Html msg
-view extraAttributes audioModule =
+view : AudioModule msg -> Html.Html msg
+view audioModule =
   let
     pxFromFloat = \float -> ( String.fromInt << round <| float ) ++ "px"
     (xpx, ypx) = Tuple.mapBoth pxFromFloat pxFromFloat audioModule.position
   in
     Html.div
-    ( List.append
-      [ Attributes.style "left" xpx
-      , Attributes.style "top" ypx
-      , Attributes.class "module-wrapper"
-      , Attributes.id audioModule.id
+    [ Attributes.style "left" xpx
+    , Attributes.style "top" ypx
+    , Attributes.classList
+      [ ("audio-module", True)
+      , ("grabbing", audioModule.dragged)
       ]
-      extraAttributes
-    )
+    , Attributes.id audioModule.id
+    , MouseEvent.onCustom "mousedown" audioModule.translators.mouseDown
+    ]
     [ viewEndpointBank audioModule.endpoints Endpoint.In
     , viewControlBank audioModule.controls
     , viewEndpointBank audioModule.endpoints Endpoint.Out

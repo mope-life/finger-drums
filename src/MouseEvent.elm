@@ -1,16 +1,15 @@
 module MouseEvent exposing
   ( MouseInfo
-  , Point
-  , Position
-  , mouseEventDecoder
-  , positionDecoder
-  , pointDecoder
-  , pointMessageDecoder
-  , positionMessageDecoder
+  , mouseInfoDecoder
+  , messageDecoder
+  , customMessageDecoder
+  , onCustom
   )
 
 import Json.Decode exposing (Decoder)
 import Json.Decode as Decode
+import Html
+import Html.Events as Events
 
 type alias MouseInfo =
   { offsetX : Float
@@ -19,37 +18,35 @@ type alias MouseInfo =
   , pageY : Float
   }
 
-type alias Point = (Float, Float)
+onCustom : String -> (MouseInfo -> msg) -> Html.Attribute msg
+onCustom event delegate =
+  Events.custom event (customMessageDecoder delegate)
 
-type alias Position = (Float, Float)
+customMessageDecoder :
+  (MouseInfo -> msg)
+  -> Decoder
+    { message : msg
+    , stopPropagation : Bool
+    , preventDefault : Bool
+    }
+customMessageDecoder delegate =
+  Decode.map
+    (\clickInfo ->
+      { message = (delegate clickInfo)
+      , stopPropagation = True
+      , preventDefault = True
+      }
+    )
+    mouseInfoDecoder
 
-mouseEventDecoder : Decoder MouseInfo
-mouseEventDecoder =
+messageDecoder : (MouseInfo -> msg) -> Decoder msg
+messageDecoder delegate =
+  mouseInfoDecoder |> Decode.map delegate
+
+mouseInfoDecoder : Decoder MouseInfo
+mouseInfoDecoder =
   Decode.map4 MouseInfo
     ( Decode.field "offsetX" Decode.float )
     ( Decode.field "offsetY" Decode.float )
     ( Decode.field "pageX" Decode.float )
     ( Decode.field "pageY" Decode.float )
-
-pointMessageDecoder : (Point -> msg) -> Decoder msg
-pointMessageDecoder delegate =
-  pointDecoder |> Decode.map delegate
-
-pointDecoder : Decoder Point
-pointDecoder =
-  mouseEventDecoder
-  |> Decode.map (\mouseInfo -> (mouseInfo.pageX, mouseInfo.pageY))
-
-positionMessageDecoder : (Position -> msg) -> Decoder msg
-positionMessageDecoder delegate =
-  positionDecoder |> Decode.map delegate
-
-positionDecoder : Decoder Position
-positionDecoder =
-  mouseEventDecoder
-  |> Decode.map
-    (\mouseEvent ->
-      ( mouseEvent.pageX - mouseEvent.offsetX
-      , mouseEvent.pageY - mouseEvent.offsetY
-      )
-    )
