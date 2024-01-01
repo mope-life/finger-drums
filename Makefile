@@ -12,7 +12,6 @@ dependencies:=$(patsubst %,$(srcdir)/%, \
     AudioModule.elm                     \
     MouseEvent.elm						\
     AudioModule/Control.elm             \
-    AudioModule/Endpoint.elm            \
 )
 
 # also depend on this Makefile

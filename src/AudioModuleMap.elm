@@ -10,7 +10,6 @@ import Browser.Events
 import Task
 import MouseEvent
 import AudioModule exposing (AudioModule, Msg(..), Type(..))
-import AudioModule.Endpoint exposing (Endpoint)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -27,10 +26,10 @@ init : () -> ( Model, Cmd Msg )
 init _ =
   ( { audioModules = Dict.empty
     , prototypes =
-      [ initPrototype ConstantModule "const"
-      , initPrototype VCOModule "osc"
-      , initPrototype VCAModule "amp"
-      , initPrototype EnvelopeModule "env"
+      [ AudioModule.initPrototype prototypeTranslators ConstantModule "const"
+      , AudioModule.initPrototype prototypeTranslators VCOModule "osc"
+      , AudioModule.initPrototype prototypeTranslators VCAModule "amp"
+      , AudioModule.initPrototype prototypeTranslators EnvelopeModule "env"
       ]
     , dragState = Nothing
     , nextId = 0
@@ -40,30 +39,24 @@ init _ =
     , Cmd.none
   )
 
-initPrototype : AudioModule.Type -> String -> AudioModule.Prototype Msg
-initPrototype type_ id =
-  AudioModule.initPrototype (prototypeTranslators type_ id) type_ id
-
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
 type alias Model =
   { audioModules : Dict Id (AudioModule Msg)
+  , prototypes : List (AudioModule Msg)
   , dragState : Maybe DragState
-  , prototypes : List (AudioModule.Prototype Msg)
   , nextId : Id
   , lines : List Line
-  , hovered : List (Endpoint Msg)
+  , hovered : List AudioModule.Endpoint
   }
 
 type Msg
   = CreateAudioModule AudioModule.Type String MouseEvent.MouseInfo
-  | CreateHalfConnection MouseEvent.MouseInfo
+  | CreateHalfConnection AudioModule.Endpoint MouseEvent.MouseInfo
   | StartDrag Draggable MouseEvent.MouseInfo
   | ContinueDrag MouseEvent.MouseInfo
   | EndDrag MouseEvent.MouseInfo
   | AudioModuleDelegate Id AudioModule.Msg
-  | IgnoreMouseEvent MouseEvent.MouseInfo
-  | IgnoreMsg AudioModule.Msg
 
 type alias DragState =
   { dragged : Draggable
@@ -131,6 +124,18 @@ mapAudioModule transform id model =
     Just audioModule ->
       with id (transform audioModule) model
 
+audioModuleTranslators : Id -> AudioModule.OperationTranslators Msg
+audioModuleTranslators id =
+  { loopback = AudioModuleDelegate id
+  , startDrag = StartDrag (AudioModuleId id)
+  , createHalfConnection = CreateHalfConnection
+  }
+
+prototypeTranslators : AudioModule.PrototypeTranslators Msg
+prototypeTranslators =
+  { createAudioModule = CreateAudioModule
+  }
+
 --------------------------------------------------------------------------------
 -- Subscriptions ---------------------------------------------------------------
 subscriptions : Model -> Sub Msg
@@ -156,7 +161,7 @@ update msg model =
         ( newAudioModule model.nextId type_ htmlId (position mouseInfo) )
         mouseInfo
         model
-    CreateHalfConnection mouseInfo ->
+    CreateHalfConnection endpoint mouseInfo ->
       createHalfConnection mouseInfo model
     StartDrag draggable mouseInfo ->
       onStartDrag draggable mouseInfo model
@@ -164,10 +169,6 @@ update msg model =
       onContinueDrag mouseInfo model
     EndDrag mouseInfo ->
       onEndDrag mouseInfo model
-    IgnoreMouseEvent _ ->
-      ( model, Cmd.none )
-    IgnoreMsg _ ->
-      ( model, Cmd.none )
     AudioModuleDelegate id audioModuleMsg ->
       case (Dict.get id model.audioModules) of
         Nothing ->
@@ -181,24 +182,6 @@ update msg model =
               }
             , cmd
             )
-
-translators : Id -> AudioModule.Translators Msg
-translators id =
-  { loopback = AudioModuleDelegate id
-  , mouseDown = StartDrag (AudioModuleId id)
-  , endpointTranslators =
-    { mouseDown = CreateHalfConnection
-    }
-  }
-
-prototypeTranslators : AudioModule.Type -> String -> AudioModule.Translators Msg
-prototypeTranslators type_ id =
-  { loopback = IgnoreMsg
-  , mouseDown = CreateAudioModule type_ id
-  , endpointTranslators =
-    { mouseDown = IgnoreMouseEvent
-    }
-  }
 
 position : MouseEvent.MouseInfo -> AudioModule.Position
 position { pageX, pageY, offsetX, offsetY} =
@@ -217,7 +200,7 @@ delta (x1, y1) (x2, y2) =
 newAudioModule : Id -> Type -> String -> AudioModule.Position -> AudioModule Msg
 newAudioModule id type_ htmlId start =
   AudioModule.init
-    ( translators id )
+    ( audioModuleTranslators id )
     type_
     ( String.concat [htmlId, "-", String.fromInt id ] )
   |> AudioModule.at start
@@ -231,7 +214,9 @@ insertAndStartDrag audioModule mouseInfo model =
   ( model
     |> with model.nextId audioModule
     |> withNextId
-  , Task.perform audioModule.translators.mouseDown (Task.succeed mouseInfo)
+  , Task.perform
+    (StartDrag <| AudioModuleId model.nextId)
+    (Task.succeed mouseInfo)
   )
 
 createHalfConnection : MouseEvent.MouseInfo -> Model -> (Model, Cmd Msg)
@@ -315,25 +300,22 @@ viewPrototypeBank : Model -> Html.Html Msg
 viewPrototypeBank model =
   Html.div
     [ Attributes.id "prototype-bank" ]
-    <| List.map AudioModule.viewPrototype model.prototypes
+    ( List.map AudioModule.view model.prototypes )
 
 viewConnectionMap : Model -> Html.Html Msg
 viewConnectionMap model =
-  Svg.svg
-    [ Attributes.id "connection-map" ]
-    ( List.map
-      (\{ endOne, endTwo } ->
-          Svg.line
-            [ Svg.Attributes.strokeLinecap "round"
-            , Svg.Attributes.x1 (String.fromFloat << Tuple.first <| endOne)
-            , Svg.Attributes.y1 (String.fromFloat << Tuple.second <| endOne)
-            , Svg.Attributes.x2 (String.fromFloat << Tuple.first <| endTwo)
-            , Svg.Attributes.y2 (String.fromFloat << Tuple.second <| endTwo)
-            ]
-            []
-      )
-      model.lines
-    )
+  Svg.svg [ Attributes.id "connection-map" ] ( List.map viewLine model.lines )
+
+viewLine : Line -> Html.Html Msg
+viewLine { endOne, endTwo } =
+  Svg.line
+    [ Svg.Attributes.strokeLinecap "round"
+    , Svg.Attributes.x1 (String.fromFloat << Tuple.first <| endOne)
+    , Svg.Attributes.y1 (String.fromFloat << Tuple.second <| endOne)
+    , Svg.Attributes.x2 (String.fromFloat << Tuple.first <| endTwo)
+    , Svg.Attributes.y2 (String.fromFloat << Tuple.second <| endTwo)
+    ]
+    []
 
 viewAudioModules : Model -> List (Html.Html Msg)
 viewAudioModules model =

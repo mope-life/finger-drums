@@ -1,10 +1,12 @@
 module AudioModule.Control exposing
   ( Control
   , Msg
+  , Translators
   , initControlGroup
   , initRadio
   , initKnob
   , initNumber
+  , withTranslators
   , labeled
   , update
   , view
@@ -21,12 +23,8 @@ import Array exposing (Array)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-initControlGroup :
-  List (Control msg)
-  -> String
-  -> Translators msg
-  -> Control msg
-initControlGroup controls id =
+initControlGroup : List (Control msg) -> String -> Control msg
+initControlGroup controls =
   let
     initialValue = case (List.head controls) of
       Nothing ->
@@ -35,31 +33,35 @@ initControlGroup controls id =
         control.value
   in
     ControlGroup ( Array.fromList controls )
-    |> initGeneric id initialValue
+    |> initGeneric initialValue
 
-initRadio : String -> String -> String -> Translators msg -> Control msg
-initRadio value group id =
+initRadio : String -> String -> String -> Control msg
+initRadio value group =
   Radio { group = group }
-  |> initGeneric id value
+  |> initGeneric value
 
-initKnob : String -> Translators msg -> Control msg
-initKnob id =
+initKnob : String -> Control msg
+initKnob =
   Knob { max = Nothing, min = Nothing, intervals = Nothing }
-  |> initGeneric id "0"
+  |> initGeneric "0"
 
-initNumber : String -> Translators msg -> Control msg
-initNumber id =
+initNumber : String -> Control msg
+initNumber =
   Number { max = Nothing, min = Nothing, step = Nothing }
-  |> initGeneric id "0"
+  |> initGeneric "0"
 
-initGeneric : String -> String -> Input msg -> Translators msg -> Control msg
-initGeneric id initialValue input translators =
+initGeneric : String -> Input msg -> String -> Control msg
+initGeneric initialValue input id =
   { id = id
   , input = input
   , value = initialValue
   , label = Nothing
-  , translators = translators
+  , translators = Nothing
   }
+
+withTranslators : Translators msg -> Control msg -> Control msg
+withTranslators translators control =
+  { control | translators = Just translators }
 
 labeled : String -> Control msg -> Control msg
 labeled label control =
@@ -72,7 +74,7 @@ type alias Control msg =
   , input : Input msg
   , value : String
   , label : Maybe String
-  , translators : Translators msg
+  , translators : Maybe (Translators msg)
   }
 
 type Input msg
@@ -115,11 +117,13 @@ update msg control =
     Value value ->
       ( { control | value = value }, Cmd.none )
     Click ->
-      ( control
-      , Task.attempt
-        ( control.translators.loopback << Focus )
-        ( Dom.focus control.id )
-      )
+      case control.translators of
+        Nothing ->
+          (control, Cmd.none)
+        Just { loopback } ->
+          ( control
+          , Task.attempt ( loopback << Focus ) ( Dom.focus control.id )
+          )
     Focus _ ->
       ( control, Cmd.none )
 
@@ -144,38 +148,50 @@ viewInput { id, input, value, translators } =
           , Attributes.type_ "radio"
           , Attributes.name group
           , Attributes.value value
-          , Html.Events.onInput (translators.loopback << Value)
-          ]
+          ] ++
+          ( case translators of
+            Nothing -> []
+            Just { loopback } -> [ Html.Events.onInput (loopback << Value) ]
+          )
         )
-        []
+        [ ]
     Number { max, min, step } ->
       Html.input
-        ( [ Attributes.id id
+        ( List.concat
+        [ [ Attributes.id id
           , Attributes.type_ "number"
           , Attributes.property "value" <| Encode.string value
-          , Html.Events.onClick (translators.loopback Click)
-          , Html.Events.onInput (translators.loopback << Value)
-          ] ++
-          ( [ max |> Maybe.map ( Attributes.attribute "max" << String.fromFloat )
-            , min |> Maybe.map ( Attributes.attribute "min" << String.fromFloat )
-            , step |> Maybe.map ( Attributes.attribute "step" << String.fromFloat )
-            ] |> List.filterMap identity
-          )
-        )
-        []
+          ]
+        , [ max |> Maybe.map (Attributes.attribute "max" << String.fromFloat)
+          , min |> Maybe.map (Attributes.attribute "min" << String.fromFloat)
+          , step |> Maybe.map (Attributes.attribute "step" << String.fromFloat)
+          ] |> List.filterMap identity
+        , case translators of
+          Nothing ->
+            [ ]
+          Just { loopback } ->
+            [ Html.Events.onInput (loopback << Value)
+            , Html.Events.onClick (loopback Click)
+            ]
+        ] )
+        [ ]
     Knob { max, min, intervals } ->
       Html.node "knob-control"
-        ( [ Attributes.id id
+        ( List.concat
+        [ [ Attributes.id id
           , Attributes.property "value" <| Encode.string value
-          , Html.Events.on "input" (knobInputDecoder translators.loopback)
-          ] ++
-          ( [ max |> Maybe.map ( Attributes.attribute "max" << String.fromFloat )
-            , min |> Maybe.map ( Attributes.attribute "min" << String.fromFloat )
-            , intervals |> Maybe.map ( Attributes.attribute "intervals" << String.fromInt )
-            ] |> List.filterMap identity
-          )
-        )
-        []
+          ]
+        , [ max |> Maybe.map (Attributes.attribute "max" << String.fromFloat)
+          , min |> Maybe.map (Attributes.attribute "min" << String.fromFloat)
+          , intervals |> Maybe.map ( Attributes.attribute "intervals" << String.fromInt)
+          ] |> List.filterMap identity
+        , case translators of
+          Nothing ->
+            [ ]
+          Just { loopback } ->
+            [ Html.Events.on "input" (knobInputDecoder loopback) ]
+        ] )
+        [ ]
     ControlGroup controls ->
       Html.div
         [ Attributes.class "input-group" ]
@@ -185,4 +201,3 @@ knobInputDecoder : (Msg -> msg) -> Decode.Decoder msg
 knobInputDecoder delegate =
   Decode.map (delegate << Value << String.fromFloat)
   <| Decode.field "detail" Decode.float
-
