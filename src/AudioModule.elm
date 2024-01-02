@@ -4,6 +4,7 @@ module AudioModule exposing
   , OperationTranslators
   , PrototypeTranslators
   , Position
+  , Direction
   , Msg(..)
   , Type(..)
   , init
@@ -12,6 +13,8 @@ module AudioModule exposing
   , translated
   , dragged
   , notDragged
+  , opposite
+  , oppositeOf
   , update
   , view
   , viewPrototype
@@ -19,6 +22,7 @@ module AudioModule exposing
 
 import Html
 import Html.Attributes as Attributes
+import Html.Events as Events
 import Array exposing (Array)
 import AudioModule.Control as Control
 import AudioModule.Control exposing (Control)
@@ -159,7 +163,9 @@ type DragState = Dragged | NotDragged
 type alias OperationTranslators msg =
   { loopback : Msg -> msg
   , startDrag : MouseEvent.MouseInfo -> msg
-  , createHalfConnection : Endpoint -> MouseEvent.MouseInfo -> msg
+  , createHalfConnection : Int -> MouseEvent.MouseInfo -> msg
+  , hoverEndpoint : Int -> msg
+  , unhoverEndpoint : Int -> msg
   }
 
 type alias PrototypeTranslators msg =
@@ -226,15 +232,30 @@ translated (dx, dy) audioModule =
     _ ->
       audioModule
 
+
+opposite : Direction -> Direction
+opposite direction =
+  case direction of
+    In -> Out
+    Out -> In
+
+oppositeOf : Endpoint -> Direction
+oppositeOf { direction } =
+  opposite direction
+
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
 update : Msg -> AudioModule msg -> (AudioModule msg, Cmd msg)
 update msg audioModule =
-  case msg of
-    ControlDelegate index controlMsg ->
-      updateControl index controlMsg audioModule
-    Input index value ->
+  case audioModule.mode of
+    Prototype _ _ ->
       ( audioModule, Cmd.none )
+    Operation _ _ _ ->
+      case msg of
+        ControlDelegate index controlMsg ->
+          updateControl index controlMsg audioModule
+        Input index value ->
+          ( audioModule, Cmd.none )
 
 updateControl :
   Int
@@ -280,9 +301,9 @@ viewPrototype type_ translators prototype =
         ( translators.createAudioModule type_ prototype.id )
       ]
       [ ]
-    , viewEndpointBank prototype.endpoints In Nothing
+    , viewEndpointBank Nothing In prototype.endpoints
     , viewControlBank prototype.controls
-    , viewEndpointBank prototype.endpoints Out Nothing
+    , viewEndpointBank Nothing Out prototype.endpoints
     ]
 
 viewOperational :
@@ -310,9 +331,9 @@ viewOperational position dragState translators audioModule =
     , Attributes.id audioModule.id
     , MouseEvent.onCustom "mousedown" translators.startDrag
     ]
-    [ viewEndpointBank audioModule.endpoints In (Just translators)
+    [ viewEndpointBank (Just translators) In audioModule.endpoints
     , viewControlBank audioModule.controls
-    , viewEndpointBank audioModule.endpoints Out (Just translators)
+    , viewEndpointBank (Just translators) Out audioModule.endpoints
     ]
 
 viewControlBank : Array (Control msg) -> Html.Html msg
@@ -322,17 +343,16 @@ viewControlBank controls =
     ( Array.map Control.view controls |> Array.toList )
 
 viewEndpointBank :
-  Array Endpoint
+  Maybe (OperationTranslators msg)
   -> Direction
-  -> Maybe (OperationTranslators msg)
+  -> Array Endpoint
   -> Html.Html msg
-viewEndpointBank endpoints direction translators =
+viewEndpointBank translators direction endpoints =
   let
     elements =
-      endpoints
-      |> Array.filter (\e -> e.direction == direction)
-      |> Array.map (viewEndpoint translators)
-      |> Array.toList
+      Array.toIndexedList endpoints
+      |> List.filter (\(_, e) -> e.direction == direction)
+      |> List.map (viewEndpoint translators)
   in
     Html.div
       [ Attributes.class "endpoint-bank" ]
@@ -345,16 +365,22 @@ viewEndpointBank endpoints direction translators =
           ) :: elements
       )
 
-viewEndpoint : Maybe (OperationTranslators msg) -> Endpoint -> Html.Html msg
-viewEndpoint translators endpoint =
+viewEndpoint :
+  Maybe (OperationTranslators msg)
+  -> (Int, Endpoint)
+  -> Html.Html msg
+viewEndpoint translators (index, endpoint) =
   Html.div
     [ Attributes.class "endpoint-wrapper" ]
     [ Html.div
       ( ( case translators of
           Nothing ->
             [ ]
-          Just { createHalfConnection } ->
-            [ MouseEvent.onCustom "mousedown" (createHalfConnection endpoint) ]
+          Just { createHalfConnection, hoverEndpoint, unhoverEndpoint } ->
+            [ MouseEvent.onCustom "mousedown" ( createHalfConnection index )
+            , Events.onMouseEnter ( hoverEndpoint index )
+            , Events.onMouseLeave ( unhoverEndpoint index )
+            ]
         ) ++
         [ Attributes.class "endpoint-jack"
         , Attributes.class "grabbable"

@@ -1,12 +1,15 @@
 module AudioModuleMap exposing (main)
 
 import Browser
+import Browser.Dom as Dom
+import Browser.Events
 import Html
 import Html.Attributes as Attributes
 import Svg
 import Svg.Attributes
 import Dict exposing (Dict)
-import Browser.Events
+import Set exposing (Set)
+import Array exposing (Array)
 import Task
 import MouseEvent
 import AudioModule exposing (AudioModule, Msg(..), Type(..))
@@ -34,7 +37,7 @@ init _ =
     , dragState = Nothing
     , nextId = 0
     , lines = []
-    , hovered = []
+    , hovered = Set.empty
     }
     , Cmd.none
   )
@@ -47,16 +50,19 @@ type alias Model =
   , dragState : Maybe DragState
   , nextId : Id
   , lines : List Line
-  , hovered : List AudioModule.Endpoint
+  , hovered : Set (Id, Int)
   }
 
 type Msg
   = CreateAudioModule AudioModule.Type String MouseEvent.MouseInfo
-  | CreateHalfConnection AudioModule.Endpoint MouseEvent.MouseInfo
+  | CreateHalfConnection Id Int MouseEvent.MouseInfo
+  | SnapAndStartDrag HalfConnection MouseEvent.MouseInfo (Result Dom.Error Dom.Element)
   | StartDrag Draggable MouseEvent.MouseInfo
   | ContinueDrag MouseEvent.MouseInfo
   | EndDrag MouseEvent.MouseInfo
   | AudioModuleDelegate Id AudioModule.Msg
+  | HoverEndpoint Id Int
+  | UnhoverEndpoint Id Int
 
 type alias DragState =
   { dragged : Draggable
@@ -65,7 +71,12 @@ type alias DragState =
 
 type Draggable
   = AudioModuleId Id
-  | HalfConnection
+  | NewConnection HalfConnection
+
+type alias HalfConnection =
+  { id : Id
+  , index : Int
+  }
 
 type alias Line =
   { endOne : Point
@@ -86,18 +97,16 @@ without : Id -> Model -> Model
 without id model =
   { model | audioModules = model.audioModules |> Dict.remove id }
 
-withDraggedId : Id -> Point -> Model -> Model
-withDraggedId id start model =
+withDragged : Draggable -> Point -> Model -> Model
+withDragged draggable start model =
   { model
-  | dragState = Just { dragged = (AudioModuleId id), lastPoint = start }
+  | dragState = Just { dragged = draggable, lastPoint = start }
   }
-  |> mapAudioModule AudioModule.dragged id
-
-withDraggedLine : Point -> Model -> Model
-withDraggedLine start model =
-  { model
-  | dragState = Just { dragged = HalfConnection, lastPoint = start }
-  }
+  |> case draggable of
+    AudioModuleId id ->
+      mapAudioModule AudioModule.dragged id
+    NewConnection _ ->
+      identity
 
 withNothingDragged : Model -> Model
 withNothingDragged model =
@@ -128,13 +137,21 @@ audioModuleTranslators : Id -> AudioModule.OperationTranslators Msg
 audioModuleTranslators id =
   { loopback = AudioModuleDelegate id
   , startDrag = StartDrag (AudioModuleId id)
-  , createHalfConnection = CreateHalfConnection
+  , createHalfConnection = CreateHalfConnection id
+  , hoverEndpoint = HoverEndpoint id
+  , unhoverEndpoint = UnhoverEndpoint id
   }
 
 prototypeTranslators : AudioModule.PrototypeTranslators Msg
 prototypeTranslators =
   { createAudioModule = CreateAudioModule
   }
+
+endpointAt : Id -> Int -> Model -> Maybe AudioModule.Endpoint
+endpointAt id index model =
+  Dict.get id model.audioModules
+  |> Maybe.map (\am -> am.endpoints)
+  |> Maybe.andThen (Array.get index)
 
 --------------------------------------------------------------------------------
 -- Subscriptions ---------------------------------------------------------------
@@ -161,8 +178,22 @@ update msg model =
         ( newAudioModule model.nextId type_ htmlId (position mouseInfo) )
         mouseInfo
         model
-    CreateHalfConnection endpoint mouseInfo ->
-      createHalfConnection mouseInfo model
+    CreateHalfConnection id index mouseInfo ->
+      case endpointAt id index model of
+        Nothing ->
+          ( model, Cmd.none )
+        Just endpoint ->
+          ( model
+          , Task.attempt
+            ( SnapAndStartDrag { id = id , index = index } mouseInfo )
+            ( Dom.getElement endpoint.id )
+          )
+    SnapAndStartDrag halfConnection mouseInfo result ->
+      case result of
+        Err _ ->
+          ( model, Cmd.none )
+        Ok element ->
+          snapAndStartDrag halfConnection element mouseInfo model
     StartDrag draggable mouseInfo ->
       onStartDrag draggable mouseInfo model
     ContinueDrag mouseInfo ->
@@ -182,6 +213,10 @@ update msg model =
               }
             , cmd
             )
+    HoverEndpoint id index ->
+      ( { model | hovered = Set.insert (id, index) model.hovered }, Cmd.none )
+    UnhoverEndpoint id index ->
+      ( { model | hovered = Set.remove (id, index) model.hovered }, Cmd.none )
 
 position : MouseEvent.MouseInfo -> AudioModule.Position
 position { pageX, pageY, offsetX, offsetY} =
@@ -205,6 +240,24 @@ newAudioModule id type_ htmlId start =
     ( String.concat [htmlId, "-", String.fromInt id ] )
   |> AudioModule.at start
 
+snapAndStartDrag :
+  HalfConnection
+  -> Dom.Element
+  -> MouseEvent.MouseInfo
+  -> Model
+  -> ( Model, Cmd Msg )
+snapAndStartDrag halfConnection { element } mouseInfo model =
+  let
+    xMid = element.x + (element.width / 2)
+    yMid = element.y + (element.height / 2)
+    line = createLine (xMid, yMid)
+  in
+    ( { model | lines = line :: model.lines }
+    , Task.perform
+      ( StartDrag <| NewConnection halfConnection )
+      ( Task.succeed mouseInfo )
+    )
+
 insertAndStartDrag :
   AudioModule Msg
   -> MouseEvent.MouseInfo
@@ -219,22 +272,9 @@ insertAndStartDrag audioModule mouseInfo model =
     (Task.succeed mouseInfo)
   )
 
-createHalfConnection : MouseEvent.MouseInfo -> Model -> (Model, Cmd Msg)
-createHalfConnection mouseInfo model =
-  let
-    line = createLine (point mouseInfo)
-  in
-  ( { model | lines = line :: model.lines }
-  , Task.perform (StartDrag HalfConnection) (Task.succeed mouseInfo)
-  )
-
 onStartDrag : Draggable -> MouseEvent.MouseInfo -> Model -> ( Model, Cmd msg )
 onStartDrag draggable mouseInfo model =
-  case draggable of
-    AudioModuleId id ->
-      ( withDraggedId id (point mouseInfo) model, Cmd.none )
-    HalfConnection ->
-      ( withDraggedLine (point mouseInfo) model, Cmd.none )
+  ( withDragged draggable (point mouseInfo) model, Cmd.none )
 
 onContinueDrag : MouseEvent.MouseInfo -> Model -> ( Model, Cmd msg )
 onContinueDrag mouseInfo model =
@@ -245,7 +285,7 @@ onContinueDrag mouseInfo model =
       case dragged of
         AudioModuleId id ->
           ( dragAudioModule mouseInfo lastPoint id model, Cmd.none )
-        HalfConnection ->
+        NewConnection _ ->
           ( dragLine mouseInfo model, Cmd.none )
 
 dragAudioModule : MouseEvent.MouseInfo -> Point -> Id -> Model -> Model
