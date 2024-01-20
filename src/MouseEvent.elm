@@ -14,8 +14,10 @@ import Html.Events as Events
 type alias MouseInfo =
   { offsetX : Float
   , offsetY : Float
-  , pageX : Float
-  , pageY : Float
+  , clientX : Float
+  , clientY : Float
+  , targetWidth : Float
+  , targetHeight : Float
   }
 
 onCustom : String -> (MouseInfo -> msg) -> Html.Attribute msg
@@ -45,8 +47,10 @@ messageDecoder delegate =
 
 mouseInfoDecoder : Decoder MouseInfo
 mouseInfoDecoder =
-  Decode.map4 MouseInfo
+  Decode.map6 MouseInfo
     ( Decode.field "offsetX" Decode.float )
     ( Decode.field "offsetY" Decode.float )
-    ( Decode.field "pageX" Decode.float )
-    ( Decode.field "pageY" Decode.float )
+    ( Decode.field "clientX" Decode.float )
+    ( Decode.field "clientY" Decode.float )
+    ( Decode.at ["target", "clientWidth"] Decode.float )
+    ( Decode.at ["target", "clientHeight"] Decode.float )

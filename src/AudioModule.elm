@@ -4,7 +4,7 @@ module AudioModule exposing
   , OperationTranslators
   , PrototypeTranslators
   , Position
-  , Direction
+  , Direction(..)
   , Msg(..)
   , Type(..)
   , init
@@ -15,6 +15,7 @@ module AudioModule exposing
   , notDragged
   , opposite
   , oppositeOf
+  , mapEndpoint
   , update
   , view
   , viewPrototype
@@ -27,6 +28,7 @@ import Array exposing (Array)
 import AudioModule.Control as Control
 import AudioModule.Control exposing (Control)
 import MouseEvent
+import Svg.Attributes exposing (transform)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -58,13 +60,13 @@ initControls type_ parentId =
     VCOModule ->
       [ ( Control.initControlGroup
           [ Control.initRadio "sine" parentId (parentId ++ "-radio-sin")
-            |> Control.labeled "sin"
+          |> Control.labeled "sin"
           , Control.initRadio "square" parentId (parentId ++ "-radio-sqr")
-            |> Control.labeled "sqr"
+          |> Control.labeled "sqr"
           , Control.initRadio "sawtooth" parentId (parentId ++ "-radio-saw")
-            |> Control.labeled "saw"
+          |> Control.labeled "saw"
           , Control.initRadio "triangle" parentId (parentId ++ "-radio-tri")
-            |> Control.labeled "tri"
+          |> Control.labeled "tri"
           ]
           parentId
         )
@@ -73,13 +75,13 @@ initControls type_ parentId =
       [ ]
     EnvelopeModule ->
       [ Control.initNumber (parentId ++ "-number-A")
-        |> Control.labeled "A"
+      |> Control.labeled "A"
       , Control.initNumber (parentId ++ "-number-D")
-        |> Control.labeled "D"
+      |> Control.labeled "D"
       , Control.initNumber (parentId ++ "-number-S")
-        |> Control.labeled "S"
+      |> Control.labeled "S"
       , Control.initNumber (parentId ++ "-number-R")
-        |> Control.labeled "R"
+      |> Control.labeled "R"
       ]
   )
   |> Array.fromList
@@ -114,6 +116,7 @@ initEndpoints type_ parentId =
       ]
       , direction = direction
       , label = label
+      , midpoint = ( 0, 0 )
       }
   in ( case type_ of
     ControllerModule ->
@@ -188,6 +191,7 @@ type alias Endpoint =
   { id : String
   , direction : Direction
   , label : String
+  , midpoint : Position
   }
 
 type Direction = In | Out
@@ -232,7 +236,6 @@ translated (dx, dy) audioModule =
     _ ->
       audioModule
 
-
 opposite : Direction -> Direction
 opposite direction =
   case direction of
@@ -242,6 +245,16 @@ opposite direction =
 oppositeOf : Endpoint -> Direction
 oppositeOf { direction } =
   opposite direction
+
+mapEndpoint : ( Endpoint -> Endpoint ) -> Int -> AudioModule msg -> AudioModule msg
+mapEndpoint transform index audioModule =
+  case (Array.get index audioModule.endpoints) of
+    Nothing ->
+      audioModule
+    Just endpoint ->
+      { audioModule
+      | endpoints = Array.set index ( transform endpoint) audioModule.endpoints
+      }
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
@@ -315,7 +328,7 @@ viewOperational :
 viewOperational position dragState translators audioModule =
   let
     pxFromFloat = \float -> ( String.fromInt << round <| float ) ++ "px"
-    (xpx, ypx) = Tuple.mapBoth pxFromFloat pxFromFloat position
+    ( xpx, ypx ) = Tuple.mapBoth pxFromFloat pxFromFloat position
   in
     Html.div
     [ Attributes.style "left" xpx
@@ -348,22 +361,19 @@ viewEndpointBank :
   -> Array Endpoint
   -> Html.Html msg
 viewEndpointBank translators direction endpoints =
-  let
-    elements =
-      Array.toIndexedList endpoints
-      |> List.filter (\(_, e) -> e.direction == direction)
-      |> List.map (viewEndpoint translators)
-  in
-    Html.div
-      [ Attributes.class "endpoint-bank" ]
-      ( if List.isEmpty elements
-        then []
-        else
-          ( Html.text <| case direction of
-              In -> "in:"
-              Out -> "out:"
-          ) :: elements
-      )
+  Array.toIndexedList endpoints
+  |> List.filter (\(_, e) -> e.direction == direction)
+  |> List.map (viewEndpoint translators)
+  |> \elements -> Html.div
+    [ Attributes.class "endpoint-bank" ]
+    ( if List.isEmpty elements
+      then []
+      else
+        ( Html.text <| case direction of
+            In -> "in:"
+            Out -> "out:"
+        ) :: elements
+    )
 
 viewEndpoint :
   Maybe (OperationTranslators msg)
@@ -373,15 +383,16 @@ viewEndpoint translators (index, endpoint) =
   Html.div
     [ Attributes.class "endpoint-wrapper" ]
     [ Html.div
-      ( ( case translators of
-          Nothing ->
-            [ ]
-          Just { createHalfConnection, hoverEndpoint, unhoverEndpoint } ->
-            [ MouseEvent.onCustom "mousedown" ( createHalfConnection index )
-            , Events.onMouseEnter ( hoverEndpoint index )
-            , Events.onMouseLeave ( unhoverEndpoint index )
-            ]
-        ) ++
+      ( translators
+      |> Maybe.map
+        (\{ createHalfConnection, hoverEndpoint, unhoverEndpoint } ->
+          [ MouseEvent.onCustom "mousedown" ( createHalfConnection index )
+          , Events.onMouseEnter ( hoverEndpoint index )
+          , Events.onMouseLeave ( unhoverEndpoint index )
+          ]
+        )
+      |> Maybe.withDefault []
+      |> List.append
         [ Attributes.class "endpoint-jack"
         , Attributes.class "grabbable"
         , Attributes.id endpoint.id
