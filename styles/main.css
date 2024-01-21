@@ -1,7 +1,8 @@
 :root {
   --wire-color: yellow;
-  --wire-hover-color: rgba(255, 255, 0, 0.5);
+  --wire-hover-color: #ffff0080;
   --piano-key-color:#ffffe8;
+  --key-border-radius: 0.5em;
   --map-background: #141414;
   --module-background: #777;
   --module-border: 5px outset #999;
@@ -12,6 +13,9 @@
   --number-input-background-color: black;
   --number-input-width: 6ch;
   --number-input-font: monospace;
+
+  --keys-height: 150px;
+  --keys-width: 350px;
 }
 
 * {
@@ -160,8 +164,9 @@ body {
 }
 
 control-keys {
-  height: 100%;
-  width: 300px;
+  height: var(--keys-height);
+  width: var(--keys-width);
+  font-size: 18pt;
 }
 
 knob-control {

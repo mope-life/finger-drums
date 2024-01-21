@@ -70,34 +70,25 @@ customElements.define(
           this._send(0);
 		}
 	  }
-	}
-
-	_getDivs(key) {
-	  const keyDiv = this.shadowRoot.getElementById(key);
-	  if (keyDiv.classList.contains("white")) {
-		const spacerDiv = this.shadowRoot.getElementById(key + "-spacer");
-		return [ keyDiv, spacerDiv ];
-	  } else {
-		return [ keyDiv ];
-	  }
-	}
+  }
 
 	_hold(key) {
-	  this._heldKeys.push(key);
-
-	  for (let div of this._getDivs(key)) {
-		div.classList.add("held");
-	  }
+    this._heldKeys.push(key);
+    let keyDiv = this.shadowRoot.getElementById(key);
+    if (keyDiv) {
+      keyDiv.classList.add("held");
+    }
 	}
 
 	// Returns whether the key we are releasing was also the last one pressed
 	_release(key) {
 	  const idx = this._heldKeys.indexOf(key);
-	  this._heldKeys.splice(idx, 1);
+    this._heldKeys.splice(idx, 1);
 
-	  for (let div of this._getDivs(key)) {
-		div.classList.remove("held");
-	  }
+    let keyDiv = this.shadowRoot.getElementById(key);
+    if (keyDiv) {
+      keyDiv.classList.remove("held");
+    }
 
 	  return idx == this._heldKeys.length;
 	}
