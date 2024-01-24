@@ -19,80 +19,80 @@
   <script src = "./scripts/elements/keys.js"></script>
   <script src="./scripts/elm.js"></script>
 </head>
-<body>
 
+<body>
   <div id="audio-module-map"></div>
 
   <template id="keys-template">
-	<style>
-    :host {
-      position: relative;
-      display: block;
-    }
+    <style>
+      :host {
+        position: relative;
+        display: block;
+      }
 
-	  * {
-		  box-sizing: border-box;
-	  }
+      * {
+        box-sizing: border-box;
+      }
 
-    #top-row {
-      height: 55%;
-      width: 100%;
-      z-index: 2;
-    }
+      #top-row {
+        height: 55%;
+        width: 100%;
+        z-index: 2;
+      }
 
-    #bottom-row {
-      height: 100%;
-      width: 100%;
-      z-index: 1;
-    }
+      #bottom-row {
+        height: 100%;
+        width: 100%;
+        z-index: 1;
+      }
 
-    #top-row, #bottom-row {
-      display: flex;
-      position: absolute;
-      top: 0;
-    }
+      #top-row, #bottom-row {
+        display: flex;
+        position: absolute;
+        top: 0;
+      }
 
-	  .key, .spacer {
-		  height: 100%;
-		  border-left: 1px solid transparent;
-		  border-right: 1px solid transparent;
-      position: relative;
-		  background-clip: content-box;
-		  font: 0.5em monospace;
-      border-radius: var(--key-border-radius);
-      flex: 1;
-	  }
+      .key, .spacer {
+        height: 100%;
+        border-left: 1px solid transparent;
+        border-right: 1px solid transparent;
+        position: relative;
+        background-clip: content-box;
+        font: 0.5em monospace;
+        border-radius: var(--key-border-radius);
+        flex: 1;
+      }
 
-	  .key span {
-		  position: absolute;
-		  bottom: 0;
-		  left: 10%;
-	  }
+      .key span {
+        position: absolute;
+        bottom: 0;
+        left: 10%;
+      }
 
-	  .key.white {
-		  color: black;
-		  background-color: var(--piano-key-color);
-	  }
+      .key.white {
+        color: black;
+        background-color: var(--piano-key-color);
+      }
 
-	  .key.black {
-		  color: white;
-      background-color: black;
-	  }
+      .key.black {
+        color: white;
+        background-color: black;
+      }
 
-	  .spacer {
-		  background-color: transparent;
-	  }
+      .spacer {
+        background-color: transparent;
+      }
 
-	  .key.white.held {
-		  background-color: #fdc;
-		  border-left: 1px inset #fdc;
-	  }
+      .key.white.held {
+        background-color: #fdc;
+        border-left: 1px inset #fdc;
+      }
 
-	  .key.black.held {
-		  background-color: #521;
-		  border-left: 1px inset #300;
-	  }
-	</style>
+      .key.black.held {
+        background-color: #521;
+        border-left: 1px inset #300;
+      }
+    </style>
 
     <!-- Top row (black keys) -->
     <div class="key-row" id="top-row">
@@ -127,46 +127,45 @@
       <div class="white key a-d-g" id='.'><span>.</span></div>
       <div class="white key b-e" id='/'><span>/</span></div>
     </div>
+  </template>
 
-		</template>
-
-		<template id="knob-template">
-			<style>
-			svg {
-				width: 100%;
-				height: 100%;
-			}
-			</style>
-			<svg viewBox="-1 -1 2 2">
-				<mask id="mask">
-					<rect x="-1" y="-1" width="2" height="2" fill="white">
-					</rect>
-					<circle cx="1.7" cy="0" r="0.8" fill="black">
-					</circle>
-					<circle cx="1.2020815280171309" cy="1.2020815280171306" r="0.8" fill="black">
-					</circle>
-					<circle cx="1.0409497792752501e-16" cy="1.7" r="0.8" fill="black">
-					</circle>
-					<circle cx="-1.2020815280171306" cy="1.2020815280171309" r="0.8" fill="black">
-					</circle>
-					<circle cx="-1.7" cy="2.0818995585505003e-16" r="0.8" fill="black">
-					</circle>
-					<circle cx="-1.202081528017131" cy="-1.2020815280171306" r="0.8" fill="black">
-					</circle>
-					<circle cx="-3.1228493378257504e-16" cy="-1.7" r="0.8" fill="black">
-					</circle>
-					<circle cx="1.2020815280171304" cy="-1.202081528017131" r="0.8" fill="black">
-					</circle>
-				</mask>
-				<g mask="url(#mask)">
-					<circle cx="0" cy="0" r="1" fill="black">
-					</circle>
-					<circle cx="0" cy="0" r="0.61" fill="#b0b0b8">
-					</circle>
-					<circle cx="-0.3138004145393736" cy="0.757581216659255" r="0.05" fill="white">
-					</circle>
-				</g>
-			</svg>
-		</template>
-	</body>
+  <template id="knob-template">
+    <style>
+      svg {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+    <svg viewBox="-1 -1 2 2">
+      <mask id="mask">
+        <rect x="-1" y="-1" width="2" height="2" fill="white">
+        </rect>
+        <circle cx="1.7" cy="0" r="0.8" fill="black">
+        </circle>
+        <circle cx="1.2020815280171309" cy="1.2020815280171306" r="0.8" fill="black">
+        </circle>
+        <circle cx="1.0409497792752501e-16" cy="1.7" r="0.8" fill="black">
+        </circle>
+        <circle cx="-1.2020815280171306" cy="1.2020815280171309" r="0.8" fill="black">
+        </circle>
+        <circle cx="-1.7" cy="2.0818995585505003e-16" r="0.8" fill="black">
+        </circle>
+        <circle cx="-1.202081528017131" cy="-1.2020815280171306" r="0.8" fill="black">
+        </circle>
+        <circle cx="-3.1228493378257504e-16" cy="-1.7" r="0.8" fill="black">
+        </circle>
+        <circle cx="1.2020815280171304" cy="-1.202081528017131" r="0.8" fill="black">
+        </circle>
+      </mask>
+      <g mask="url(#mask)">
+        <circle cx="0" cy="0" r="1" fill="black">
+        </circle>
+        <circle cx="0" cy="0" r="0.61" fill="#b0b0b8">
+        </circle>
+        <circle cx="-0.3138004145393736" cy="0.757581216659255" r="0.05" fill="white">
+        </circle>
+      </g>
+    </svg>
+  </template>
+</body>
 </html>
