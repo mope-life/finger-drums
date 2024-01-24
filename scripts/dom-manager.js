@@ -14,7 +14,7 @@ const ENDPOINT_LABEL_HTML_CLASS = "endpoint-label";
 const GRABBABLE_HTML_CLASS = "grabbable";
 
 // import "./elements/knob.js";
-import "./elements/keys.js";
+// import "./elements/keys.js";
 
 // simple helper function for cleanliness
 function classedElement(type, ...classes) {

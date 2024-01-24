@@ -163,7 +163,7 @@ body {
   cursor: grabbing !important;
 }
 
-control-keys {
+keys-control {
   height: var(--keys-height);
   width: var(--keys-width);
   font-size: 18pt;

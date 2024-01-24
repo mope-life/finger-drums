@@ -4,9 +4,7 @@ function frequencyOf(noteId, a4 = 440) {
   return a4 * 2**((noteId - 69) / 12);
 }
 
-customElements.define(
-  "control-keys",
-  class extends HTMLElement {
+class KeysControl extends HTMLElement {
     constructor() {
       super();
 
@@ -101,4 +99,6 @@ customElements.define(
           detail: freq
         }));
       }
-    });
+}
+
+customElements.define("keys-control", KeysControl);
