@@ -3,6 +3,7 @@ module AudioModule.Control exposing
   , Msg
   , Translators
   , initControlGroup
+  , initKeyboard
   , initRadio
   , initKnob
   , initNumber
@@ -34,6 +35,11 @@ initControlGroup controls =
   in
     ControlGroup ( Array.fromList controls )
     |> initGeneric initialValue
+
+initKeyboard : String -> Control msg
+initKeyboard =
+  Keyboard
+  |> initGeneric ""
 
 initRadio : String -> String -> String -> Control msg
 initRadio value group =
@@ -81,6 +87,7 @@ type Input msg
   = Radio RadioParameters
   | Number NumberParameters
   | Knob KnobParameters
+  | Keyboard
   | ControlGroup (Array (Control msg))
 
 type alias RadioParameters =
@@ -192,6 +199,8 @@ viewInput { id, input, value, translators } =
             [ Html.Events.on "input" (knobInputDecoder loopback) ]
         ] )
         [ ]
+    Keyboard ->
+      Html.node "keys-control" [ Attributes.tabindex -1 ] []
     ControlGroup controls ->
       Html.div
         [ Attributes.class "input-group" ]

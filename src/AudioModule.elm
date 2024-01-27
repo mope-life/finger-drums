@@ -13,8 +13,6 @@ module AudioModule exposing
   , translated
   , dragged
   , notDragged
-  , opposite
-  , oppositeOf
   , mapEndpoint
   , update
   , view
@@ -51,8 +49,8 @@ initGeneric mode type_ id =
 initControls : Type -> String -> Mode msg -> Array (Control msg)
 initControls type_ parentId =
   ( case type_ of
-    ControllerModule ->
-      [ ]
+    KeyboardModule ->
+      [ Control.initKeyboard (parentId ++ "-keys") ]
     DestinationModule ->
       [ ]
     ConstantModule ->
@@ -119,7 +117,7 @@ initEndpoints type_ parentId =
       , midpoint = ( 0, 0 )
       }
   in ( case type_ of
-    ControllerModule ->
+    KeyboardModule ->
       [ initialize Out "freq"
       , initialize Out "gate"
       , initialize Out "trig"
@@ -180,7 +178,7 @@ type Msg
   | Input Int String
 
 type Type
-  = ControllerModule
+  = KeyboardModule
   | DestinationModule
   | ConstantModule
   | VCOModule
@@ -205,7 +203,6 @@ dragged audioModule =
       { audioModule | mode = Operation position Dragged messages }
     _ ->
       audioModule
-
 
 notDragged : AudioModule msg -> AudioModule msg
 notDragged audioModule =
@@ -235,16 +232,6 @@ translated (dx, dy) audioModule =
       }
     _ ->
       audioModule
-
-opposite : Direction -> Direction
-opposite direction =
-  case direction of
-    In -> Out
-    Out -> In
-
-oppositeOf : Endpoint -> Direction
-oppositeOf { direction } =
-  opposite direction
 
 mapEndpoint : ( Endpoint -> Endpoint ) -> Int -> AudioModule msg -> AudioModule msg
 mapEndpoint transform index audioModule =
@@ -356,14 +343,14 @@ viewControlBank controls =
     ( Array.map Control.view controls |> Array.toList )
 
 viewEndpointBank :
-  Maybe (OperationTranslators msg)
+  Maybe ( OperationTranslators msg )
   -> Direction
   -> Array Endpoint
   -> Html.Html msg
 viewEndpointBank translators direction endpoints =
   Array.toIndexedList endpoints
-  |> List.filter (\(_, e) -> e.direction == direction)
-  |> List.map (viewEndpoint translators)
+  |> List.filter (\(_, e) -> e.direction == direction )
+  |> List.map ( viewEndpoint translators )
   |> \elements -> Html.div
     [ Attributes.class "endpoint-bank" ]
     ( if List.isEmpty elements
@@ -376,10 +363,10 @@ viewEndpointBank translators direction endpoints =
     )
 
 viewEndpoint :
-  Maybe (OperationTranslators msg)
-  -> (Int, Endpoint)
+  Maybe ( OperationTranslators msg )
+  -> ( Int, Endpoint )
   -> Html.Html msg
-viewEndpoint translators (index, endpoint) =
+viewEndpoint translators ( index, endpoint ) =
   Html.div
     [ Attributes.class "endpoint-wrapper" ]
     [ Html.div

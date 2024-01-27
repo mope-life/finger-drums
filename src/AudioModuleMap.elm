@@ -10,7 +10,7 @@ import Svg.Attributes
 import Json.Decode as Decode
 import Dict exposing (Dict)
 import Set exposing (Set)
-import Array
+import Array exposing (Array)
 import Task
 import MouseEvent
 import AudioModule exposing (AudioModule, Endpoint, Msg(..), Type(..))
@@ -28,26 +28,33 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-  ( { audioModules = Dict.empty
-    , prototypes =
+  let
+    initialModules =
+      [ (KeyboardModule, "keys") ]
+      |> List.indexedMap (\id (type_, htmlId) -> (id, newAudioModule id type_ htmlId (0, 0) ) )
+      |> Dict.fromList
+    prototypes = Array.fromList
       [ AudioModule.initPrototype prototypeTranslators ConstantModule "const"
       , AudioModule.initPrototype prototypeTranslators VCOModule "osc"
       , AudioModule.initPrototype prototypeTranslators VCAModule "amp"
       , AudioModule.initPrototype prototypeTranslators EnvelopeModule "env"
       ]
-    , connections = []
-    , dragState = Nothing
-    , hovered = Set.empty
-    , nextId = 0
-    }
-    , Cmd.none
-  )
+  in
+    ( { audioModules = initialModules
+      , connections = []
+      , dragState = Nothing
+      , hovered = Set.empty
+      , nextId = Dict.size initialModules
+      , prototypes = prototypes
+      }
+      , Cmd.none
+    )
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
 type alias Model =
   { audioModules : Dict Id (AudioModule Msg)
-  , prototypes : List (AudioModule Msg)
+  , prototypes : Array (AudioModule Msg)
   , connections : List Connection
   , dragState : Maybe DragState
   , hovered : Set EndpointId
@@ -356,7 +363,8 @@ findConnection halfConnection model =
     )
     Nothing
     ( Set.toList model.hovered )
-  |> Maybe.map (\conn -> { model | connections = conn :: model.connections } )
+  |> Maybe.map (\conn -> push conn model.connections)
+  |> Maybe.map (\connections -> { model | connections = connections } )
   |> Maybe.withDefault model
 
 attemptConnection : EndpointId -> EndpointId -> Model -> Maybe Connection
@@ -410,15 +418,25 @@ view model =
   Html.div
     [ Attributes.id "audio-module-map" ]
     ( viewPrototypeBank model
-      :: viewConnectionMap model
-      :: viewAudioModules model
+    :: viewControlModules model
+    :: viewConnectionMap model
+    :: viewAudioModules model
     )
 
 viewPrototypeBank : Model -> Html.Html Msg
 viewPrototypeBank model =
   Html.div
     [ Attributes.id "prototype-bank" ]
-    ( List.map AudioModule.view model.prototypes )
+    ( Array.map AudioModule.view model.prototypes |> Array.toList )
+
+viewControlModules : Model -> Html.Html Msg
+viewControlModules model =
+  Html.div
+    [ Attributes.id "control-modules" ]
+    ( case List.head (Dict.values model.audioModules) of
+      Just am -> [ AudioModule.view am ]
+      Nothing -> []
+    )
 
 viewConnectionMap : Model -> Html.Html Msg
 viewConnectionMap model =
@@ -429,11 +447,11 @@ viewConnectionMap model =
       ( endpointAt c.idIn model )
       ( endpointAt c.idOut model )
     )
-  |> (\lines -> case model.dragState of
-      Nothing -> lines
+  |> ( case model.dragState of
+      Nothing -> identity
       Just { dragged } -> case dragged of
-        HalfConnection _ line -> line :: lines
-        _ -> lines
+        HalfConnection _ line -> push line
+        _ -> identity
     )
   |> List.map viewLine
   |> Svg.svg
@@ -454,4 +472,10 @@ viewAudioModules : Model -> List (Html.Html Msg)
 viewAudioModules model =
   model.audioModules
   |> Dict.values
-  |> List.map AudioModule.view
+  |> List.tail
+  |> Maybe.map (List.map AudioModule.view)
+  |> Maybe.withDefault []
+
+push : a -> List a -> List a
+push a list =
+  a :: list

@@ -54,13 +54,15 @@ body {
   position: absolute;
   height: 100%;
   width: 100%;
+  display: flex;
 }
 
 #prototype-bank {
   background: var(--prototype-bank-background);
   height: 100%;
-  position: absolute;
-  display: grid;
+  width: fit-content;
+  position: relative;
+  display: inline-grid;
   align-content: start;
   gap: 2em;
   padding: 1em;
@@ -82,17 +84,38 @@ body {
   z-index: 10;
 }
 
+#control-modules {
+  position: relative;
+  display: inline-block;
+  height: calc(var(--keys-height) + 20px);
+  background: var(--prototype-bank-background);
+  top: calc(100% - (var(--keys-height) + 20px));
+  flex: 1;
+  border-left: 2px dotted var(--module-background);
+}
+
 .audio-module {
-  background: var(--module-background);
-  border: var(--module-border);
   display: flex;
   align-items: stretch;
+}
+
+#prototype-bank > .audio-module,
+#audio-module-map > .audio-module {
+  background: var(--module-background);
+  border: var(--module-border);
   cursor: grab;
 }
 
 #audio-module-map > .audio-module {
   position: absolute;
   z-index: 100;
+}
+
+#control-modules > .audio-module {
+  width: min-content;
+  height: 100%;
+  padding: 10px;
+  border-right: 2px dotted var(--module-background);
 }
 
 .audio-module.dragging {
