@@ -1,12 +1,10 @@
 module AudioModule exposing
   ( AudioModule
-  , Endpoint
-  , OperationTranslators
-  , PrototypeTranslators
-  , Position
-  , Direction(..)
-  , Msg(..)
+  , PrototypeModule
   , Type(..)
+  , Mode(..)
+  , PositionInfo
+  , DragState(..)
   , init
   , initPrototype
   , at
@@ -14,168 +12,147 @@ module AudioModule exposing
   , dragged
   , notDragged
   , mapEndpoint
-  , update
-  , view
   , viewPrototype
+  , viewFloating
+  , viewFixed
   )
 
 import Html
 import Html.Attributes as Attributes
-import Html.Events as Events
 import Array exposing (Array)
 import AudioModule.Control as Control
 import AudioModule.Control exposing (Control)
+import AudioModule.Endpoint as Endpoint
+import AudioModule.Endpoint exposing (Endpoint)
+import AudioModule.Translators exposing (Translators)
 import MouseEvent
-import Svg.Attributes exposing (transform)
+import Utility exposing (..)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
-init :  OperationTranslators msg -> Type -> String -> AudioModule msg
-init translators =
-  initGeneric <| Operation (0, 0) NotDragged translators
-
-initPrototype : PrototypeTranslators msg -> Type -> String -> AudioModule msg
-initPrototype translators type_ =
-  initGeneric (Prototype type_ translators) type_
-
-initGeneric : Mode msg -> Type -> String -> AudioModule msg
-initGeneric mode type_ id =
-  { id = id
-  , mode = mode
-  , controls = initControls type_ id mode
-  , endpoints = initEndpoints type_ id
+init : Mode -> Type -> String -> AudioModule
+init mode type_ htmlId =
+  { mode = mode
+  , htmlId = htmlId
+  , controls = initControls type_ htmlId
+  , endpoints = initEndpoints type_ htmlId
   }
 
-initControls : Type -> String -> Mode msg -> Array (Control msg)
-initControls type_ parentId =
+initPrototype : Type -> String -> PrototypeModule
+initPrototype type_ htmlId =
+  { type_ = type_
+  , htmlId = htmlId
+  , controls = initControls type_ htmlId
+  , endpoints = initEndpoints type_ htmlId
+  }
+
+initControls : Type -> String -> Array Control
+initControls type_ parentHtmlId =
   ( case type_ of
     KeyboardModule ->
-      [ Control.initKeyboard (parentId ++ "-keys") ]
+      [ Control.initKeyboard (parentHtmlId ++ "-keyboard") ]
     DestinationModule ->
       [ ]
     ConstantModule ->
-      [ Control.initKnob (parentId ++ "-knob") ]
+      [ Control.initKnob (parentHtmlId ++ "-knob") ]
     VCOModule ->
       [ ( Control.initControlGroup
-          [ Control.initRadio "sine" parentId (parentId ++ "-radio-sin")
+          [ Control.initRadio "sine" parentHtmlId (parentHtmlId ++ "-radio-sin")
           |> Control.labeled "sin"
-          , Control.initRadio "square" parentId (parentId ++ "-radio-sqr")
+          , Control.initRadio "square" parentHtmlId (parentHtmlId ++ "-radio-sqr")
           |> Control.labeled "sqr"
-          , Control.initRadio "sawtooth" parentId (parentId ++ "-radio-saw")
+          , Control.initRadio "sawtooth" parentHtmlId (parentHtmlId ++ "-radio-saw")
           |> Control.labeled "saw"
-          , Control.initRadio "triangle" parentId (parentId ++ "-radio-tri")
+          , Control.initRadio "triangle" parentHtmlId (parentHtmlId ++ "-radio-tri")
           |> Control.labeled "tri"
           ]
-          parentId
+          parentHtmlId
         )
       ]
     VCAModule ->
       [ ]
     EnvelopeModule ->
-      [ Control.initNumber (parentId ++ "-number-A")
+      [ Control.initNumber (parentHtmlId ++ "-number-A")
       |> Control.labeled "A"
-      , Control.initNumber (parentId ++ "-number-D")
+      , Control.initNumber (parentHtmlId ++ "-number-D")
       |> Control.labeled "D"
-      , Control.initNumber (parentId ++ "-number-S")
+      , Control.initNumber (parentHtmlId ++ "-number-S")
       |> Control.labeled "S"
-      , Control.initNumber (parentId ++ "-number-R")
+      , Control.initNumber (parentHtmlId ++ "-number-R")
       |> Control.labeled "R"
       ]
   )
   |> Array.fromList
-  |> initControlTranslators
-
-initControlTranslators : Array (Control msg) -> Mode msg -> Array (Control msg)
-initControlTranslators controls mode =
-  case mode of
-    Prototype _ _ ->
-      controls
-    Operation _ _ translators ->
-      Array.indexedMap
-        (\idx control ->
-          Control.withTranslators
-            { loopback = translators.loopback << (ControlDelegate idx)
-            , input = translators.loopback << (Input idx)
-            }
-            control
-        )
-        controls
 
 initEndpoints : Type -> String -> Array Endpoint
-initEndpoints type_ parentId =
+initEndpoints type_ parentHtmlId =
   let
     initialize direction label =
-      { id = String.concat
-      [ parentId
-      , case direction of
-        In -> "-endpoint-in-"
-        Out -> "-endpoint-out-"
-      , label
-      ]
-      , direction = direction
-      , label = label
-      , midpoint = ( 0, 0 )
-      }
+      Endpoint.init direction label
+        ( String.concat
+          [ parentHtmlId
+          , case direction of
+            Endpoint.In -> "-endpoint-in-"
+            Endpoint.Out -> "-endpoint-out-"
+          , label
+          ]
+        )
   in ( case type_ of
     KeyboardModule ->
-      [ initialize Out "freq"
-      , initialize Out "gate"
-      , initialize Out "trig"
+      [ initialize Endpoint.Out "freq"
+      , initialize Endpoint.Out "gate"
+      , initialize Endpoint.Out "trig"
       ]
     DestinationModule ->
-      [ initialize In "signal"
+      [ initialize Endpoint.In "signal"
       ]
     ConstantModule ->
-      [ initialize Out "cv"
+      [ initialize Endpoint.Out "cv"
       ]
     VCOModule ->
-      [ initialize In "freq"
-      , initialize In "detune"
-      , initialize Out "signal"
+      [ initialize Endpoint.In "freq"
+      , initialize Endpoint.In "detune"
+      , initialize Endpoint.Out "signal"
       ]
     VCAModule ->
-      [ initialize In "signal"
-      , initialize In "cv"
-      , initialize Out "signal"
+      [ initialize Endpoint.In "signal"
+      , initialize Endpoint.In "cv"
+      , initialize Endpoint.Out "signal"
       ]
     EnvelopeModule ->
-      [ initialize In "gate"
-      , initialize In "trig"
-      , initialize Out "cv"
+      [ initialize Endpoint.In "gate"
+      , initialize Endpoint.In "trig"
+      , initialize Endpoint.Out "cv"
       ]
   )
   |> Array.fromList
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
-type alias AudioModule msg =
-  { id : String
-  , mode : Mode msg
-  , controls : Array (Control msg)
+type alias AudioModule =
+  { mode : Mode
+  , htmlId : String
+  , controls : Array Control
   , endpoints : Array Endpoint
   }
 
-type Mode msg
-  = Prototype Type (PrototypeTranslators msg)
-  | Operation Position DragState (OperationTranslators msg)
+type alias PrototypeModule =
+  { type_ : Type
+  , htmlId : String
+  , controls : Array Control
+  , endpoints : Array Endpoint
+  }
+
+type Mode
+  = Floating PositionInfo
+  | Fixed
+
+type alias PositionInfo =
+  { dragState : DragState
+  , position : Vec2
+  }
 
 type DragState = Dragged | NotDragged
-
-type alias OperationTranslators msg =
-  { loopback : Msg -> msg
-  , startDrag : MouseEvent.MouseInfo -> msg
-  , createHalfConnection : Int -> MouseEvent.MouseInfo -> msg
-  , hoverEndpoint : Int -> msg
-  , unhoverEndpoint : Int -> msg
-  }
-
-type alias PrototypeTranslators msg =
-  { createAudioModule : Type -> String -> MouseEvent.MouseInfo -> msg
-  }
-
-type Msg
-  = ControlDelegate Int Control.Msg
-  | Input Int String
 
 type Type
   = KeyboardModule
@@ -185,208 +162,124 @@ type Type
   | VCAModule
   | EnvelopeModule
 
-type alias Endpoint =
-  { id : String
-  , direction : Direction
-  , label : String
-  , midpoint : Position
-  }
-
-type Direction = In | Out
-
-type alias Position = (Float, Float)
-
-dragged : AudioModule msg -> AudioModule msg
+dragged : AudioModule -> AudioModule
 dragged audioModule =
   case audioModule.mode of
-    Operation position _ messages ->
-      { audioModule | mode = Operation position Dragged messages }
+    Floating posinfo ->
+      { audioModule | mode = Floating { posinfo | dragState = Dragged } }
     _ ->
       audioModule
 
-notDragged : AudioModule msg -> AudioModule msg
+notDragged : AudioModule -> AudioModule
 notDragged audioModule =
   case audioModule.mode of
-    Operation position _ messages ->
-      { audioModule | mode = Operation position NotDragged messages }
+    Floating posinfo ->
+      { audioModule | mode = Floating { posinfo | dragState = NotDragged } }
     _ ->
       audioModule
 
-at : Position -> AudioModule msg -> AudioModule msg
+at : Vec2 -> AudioModule -> AudioModule
 at position audioModule =
   case audioModule.mode of
-    Operation _ dragState messages ->
-      { audioModule | mode = Operation position dragState messages }
+    Floating posinfo ->
+      { audioModule | mode = Floating { posinfo | position = position } }
     _ ->
       audioModule
 
-translated : (Float, Float) -> AudioModule msg -> AudioModule msg
+translated : (Float, Float) -> AudioModule -> AudioModule
 translated (dx, dy) audioModule =
   case audioModule.mode of
-    Operation position dragState messages ->
+    Floating posinfo ->
       { audioModule
-        | mode = Operation
-          (Tuple.mapBoth (\x -> x + dx) (\y -> y + dy) position)
-          dragState
-          messages
+        | mode = Floating
+          { posinfo
+          | position = (Tuple.mapBoth (\x -> x + dx) (\y -> y + dy) posinfo.position)
+          }
       }
     _ ->
       audioModule
 
-mapEndpoint : ( Endpoint -> Endpoint ) -> Int -> AudioModule msg -> AudioModule msg
+mapEndpoint : ( Endpoint -> Endpoint ) -> Int -> AudioModule -> AudioModule
 mapEndpoint transform index audioModule =
   case (Array.get index audioModule.endpoints) of
     Nothing ->
       audioModule
     Just endpoint ->
       { audioModule
-      | endpoints = Array.set index ( transform endpoint) audioModule.endpoints
+      | endpoints = Array.set index (transform endpoint) audioModule.endpoints
       }
 
 --------------------------------------------------------------------------------
--- Update ----------------------------------------------------------------------
-update : Msg -> AudioModule msg -> (AudioModule msg, Cmd msg)
-update msg audioModule =
-  case audioModule.mode of
-    Prototype _ _ ->
-      ( audioModule, Cmd.none )
-    Operation _ _ _ ->
-      case msg of
-        ControlDelegate index controlMsg ->
-          updateControl index controlMsg audioModule
-        Input index value ->
-          ( audioModule, Cmd.none )
-
-updateControl :
-  Int
-  -> Control.Msg
-  -> AudioModule msg
-  -> (AudioModule msg, Cmd msg)
-updateControl index controlMsg audioModule =
-  case (Array.get index audioModule.controls) of
-    Nothing ->
-      ( audioModule, Cmd.none )
-    Just control ->
-      let
-        ( ctrl, cmd ) = Control.update controlMsg control
-      in
-        ( { audioModule | controls = Array.set index ctrl audioModule.controls }
-        , cmd
-        )
-
---------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
-view : AudioModule msg -> Html.Html msg
-view audioModule =
-  case audioModule.mode of
-    Prototype type_ msgs ->
-      viewPrototype type_ msgs audioModule
-    Operation position dragState msgs ->
-      viewOperational position dragState msgs audioModule
-
-viewPrototype :
-  Type
-  -> PrototypeTranslators msg
-  -> AudioModule msg
-  -> Html.Html msg
-viewPrototype type_ translators prototype =
-  Html.div
-    [ Attributes.class "audio-module"
-    , Attributes.id (prototype.id ++ "-proto")
-    ]
-    [ Html.div
-      [ Attributes.class "prototype-click-shield"
-      , MouseEvent.onCustom
-        "mousedown"
-        ( translators.createAudioModule type_ prototype.id )
-      ]
-      [ ]
-    , viewEndpointBank Nothing In prototype.endpoints
-    , viewControlBank prototype.controls
-    , viewEndpointBank Nothing Out prototype.endpoints
-    ]
-
-viewOperational :
-  Position
-  -> DragState
-  -> OperationTranslators msg
-  -> AudioModule msg
-  -> Html.Html msg
-viewOperational position dragState translators audioModule =
+viewFloating : PositionInfo -> Translators msg -> AudioModule -> Html.Html msg
+viewFloating { position, dragState } translators audioModule =
   let
     pxFromFloat = \float -> ( String.fromInt << round <| float ) ++ "px"
     ( xpx, ypx ) = Tuple.mapBoth pxFromFloat pxFromFloat position
   in
     Html.div
-    [ Attributes.style "left" xpx
-    , Attributes.style "top" ypx
-    , Attributes.classList
-      [ ("audio-module", True)
-      , ( "grabbing"
-        , case dragState of
-          Dragged -> True
-          NotDragged -> False
-        )
+    ( List.concat
+      [ commonAttributes audioModule.htmlId
+      , [ Attributes.style "left" xpx
+        , Attributes.style "top" ypx
+        , MouseEvent.onCustom "mousedown" translators.startDrag
+        ]
+      , case dragState of
+        Dragged -> [ Attributes.class "grabbing" ]
+        NotDragged -> [ ]
       ]
-    , Attributes.id audioModule.id
-    , MouseEvent.onCustom "mousedown" translators.startDrag
-    ]
-    [ viewEndpointBank (Just translators) In audioModule.endpoints
-    , viewControlBank audioModule.controls
-    , viewEndpointBank (Just translators) Out audioModule.endpoints
-    ]
+    )
+    ( commonContents ( Just translators ) audioModule.endpoints audioModule.controls )
 
-viewControlBank : Array (Control msg) -> Html.Html msg
-viewControlBank controls =
+viewFixed : Translators msg -> AudioModule -> Html.Html msg
+viewFixed translators audioModule =
   Html.div
-    [ Attributes.class "control-bank" ]
-    ( Array.map Control.view controls |> Array.toList )
+    ( commonAttributes audioModule.htmlId )
+    ( commonContents ( Just translators ) audioModule.endpoints audioModule.controls )
 
-viewEndpointBank :
-  Maybe ( OperationTranslators msg )
-  -> Direction
-  -> Array Endpoint
-  -> Html.Html msg
-viewEndpointBank translators direction endpoints =
-  Array.toIndexedList endpoints
-  |> List.filter (\(_, e) -> e.direction == direction )
-  |> List.map ( viewEndpoint translators )
-  |> \elements -> Html.div
-    [ Attributes.class "endpoint-bank" ]
-    ( if List.isEmpty elements
-      then []
-      else
-        ( Html.text <| case direction of
-            In -> "in:"
-            Out -> "out:"
-        ) :: elements
+viewPrototype : ( Type -> MouseEvent.MouseInfo -> msg ) -> PrototypeModule -> Html.Html msg
+viewPrototype createAudioModule prototype =
+  Html.div
+    ( commonAttributes prototype.htmlId )
+    ( Html.div
+      [ Attributes.class "prototype-click-shield"
+      , MouseEvent.onCustom "mousedown" ( createAudioModule prototype.type_ )
+      ]
+      [ ]
+      :: ( commonContents Nothing prototype.endpoints prototype.controls )
     )
 
-viewEndpoint :
-  Maybe ( OperationTranslators msg )
-  -> ( Int, Endpoint )
-  -> Html.Html msg
-viewEndpoint translators ( index, endpoint ) =
-  Html.div
-    [ Attributes.class "endpoint-wrapper" ]
-    [ Html.div
-      ( translators
-      |> Maybe.map
-        (\{ createHalfConnection, hoverEndpoint, unhoverEndpoint } ->
-          [ MouseEvent.onCustom "mousedown" ( createHalfConnection index )
-          , Events.onMouseEnter ( hoverEndpoint index )
-          , Events.onMouseLeave ( unhoverEndpoint index )
-          ]
-        )
-      |> Maybe.withDefault []
-      |> List.append
-        [ Attributes.class "endpoint-jack"
-        , Attributes.class "grabbable"
-        , Attributes.id endpoint.id
-        ]
+commonAttributes : String -> List (Html.Attribute msg)
+commonAttributes htmlId =
+  [ Attributes.class "audio-module"
+  , Attributes.id htmlId
+  ]
+
+commonContents : Maybe ( Translators msg ) -> Array Endpoint -> Array Control -> List ( Html.Html msg )
+commonContents maybeTranslators endpoints controls =
+  [ viewEndpointBank maybeTranslators Endpoint.In endpoints
+  , viewControlBank maybeTranslators controls
+  , viewEndpointBank maybeTranslators Endpoint.Out endpoints
+  ]
+
+viewEndpointBank : Maybe ( Translators msg ) -> Endpoint.Direction -> Array Endpoint -> Html.Html msg
+viewEndpointBank maybeTranslators direction endpoints =
+  endpoints
+  |> Array.filter (\e -> e.direction == direction )
+  |> Array.indexedMap ( Endpoint.view maybeTranslators )
+  |>(\elements -> if Array.isEmpty elements
+    then [ ]
+    else
+      ( Html.text <| case direction of
+        Endpoint.In -> "in:"
+        Endpoint.Out -> "out:"
       )
-      [ ]
-    , Html.label
-      [ Attributes.class "endpoint-label" ]
-      [ Html.text endpoint.label ]
-    ]
+      :: ( Array.toList elements )
+    )
+  |> Html.div [ Attributes.class "endpoint-bank" ]
+
+viewControlBank : Maybe ( Translators msg ) -> Array Control -> Html.Html msg
+viewControlBank maybeTranslators controls =
+  Html.div
+    [ Attributes.class "control-bank" ]
+    ( Array.indexedMap ( Control.view maybeTranslators ) controls |> Array.toList )

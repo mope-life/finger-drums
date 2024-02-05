@@ -11,7 +11,10 @@ sources:=$(patsubst %,$(srcdir)/%, \
 dependencies:=$(patsubst %,$(srcdir)/%, \
     AudioModule.elm                     \
     MouseEvent.elm						\
+    Utility.elm							\
     AudioModule/Control.elm             \
+    AudioModule/Endpoint.elm            \
+    AudioModule/Translators.elm         \
 )
 
 # also depend on this Makefile

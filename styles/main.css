@@ -55,6 +55,7 @@ body {
   height: 100%;
   width: 100%;
   display: flex;
+  align-items: end;
 }
 
 #prototype-bank {
@@ -64,14 +65,13 @@ body {
   position: relative;
   display: inline-grid;
   align-content: start;
+  justify-items: center;
   gap: 2em;
   padding: 1em;
   overflow: scroll;
 }
 
 #prototype-bank > .audio-module {
-  justify-self: center;
-  align-self: start;
   position: relative;
 }
 
@@ -84,12 +84,11 @@ body {
   z-index: 10;
 }
 
-#control-modules {
+#controller-bank {
   position: relative;
   display: inline-block;
-  height: calc(var(--keys-height) + 20px);
+  height: min-content;
   background: var(--prototype-bank-background);
-  top: calc(100% - (var(--keys-height) + 20px));
   flex: 1;
   border-left: 2px dotted var(--module-background);
 }
@@ -111,11 +110,12 @@ body {
   z-index: 100;
 }
 
-#control-modules > .audio-module {
+#controller-bank > .audio-module {
   width: min-content;
-  height: 100%;
+  height: min-content;
   padding: 10px;
   border-right: 2px dotted var(--module-background);
+  flex-direction: column-reverse;
 }
 
 .audio-module.dragging {
@@ -147,9 +147,18 @@ body {
 .endpoint-bank {
   font: var(--label-font);
   display: flex;
-  justify-content: top;
+  justify-content: start;
   align-items: stretch;
   flex-direction: column;
+  flex-grow: 0;
+  box-sizing: content-box;
+}
+
+#controller-bank > .audio-module .endpoint-bank {
+  border: none;
+  width: 100%;
+  flex-direction: row;
+  justify-content: space-around;
   flex-grow: 0;
   box-sizing: content-box;
 }
