@@ -44,17 +44,18 @@ init _ =
       , createPrototypeModule EnvelopeModule
       ]
       |> Array.fromList
-      |> Array.indexedMap(\i f -> f i )
-  in
-    ( { audioModules = initialModules
+      |> Array.indexedMap (\i f -> f i )
+    model =
+      { audioModules = initialModules
       , prototypes = prototypes
       , connections = []
       , dragState = Nothing
       , hovered = Set.empty
       , nextId = Dict.size initialModules
       }
-      , Cmd.none
-    )
+    cmd = initializeEndpoints model
+  in
+    ( model, cmd )
 
 --------------------------------------------------------------------------------
 -- Model -----------------------------------------------------------------------
@@ -206,21 +207,31 @@ update msg model =
       , Task.attempt FocusResult ( Dom.focus htmlId )
       )
     ControlInput id index value ->
-      ( mapAudioModule
-          (\audioModule -> case Array.get index audioModule.controls of
-            Nothing ->
-              audioModule
-            Just control ->
-              { audioModule
-              | controls = Array.set index { control | value = value } audioModule.controls
-              }
-          )
-          id
-          model
+      ( mapAudioModule (AudioModule.updateControlValue index value) id model
       , Cmd.none
       )
     FocusResult _ ->
       ( model, Cmd.none )
+
+initializeEndpoints : Model -> Cmd Msg
+initializeEndpoints model =
+  model.audioModules
+  |> Dict.toList
+  |> List.map ( apply2 fetchAudioModuleEndpointMidpoints )
+  |> Cmd.batch
+
+fetchAudioModuleEndpointMidpoints : Id -> AudioModule -> Cmd Msg
+fetchAudioModuleEndpointMidpoints id audioModule =
+  audioModule.endpoints
+  |> Array.indexedMap ( fetchEndpointMidpoint id )
+  |> Array.toList
+  |> Cmd.batch
+
+fetchEndpointMidpoint : Id -> Int -> Endpoint -> Cmd Msg
+fetchEndpointMidpoint id index endpoint =
+  Task.attempt
+    ( UpdateEndpointCoordinates ( id, index ) )
+    ( Dom.getElement endpoint.htmlId )
 
 positionFromMouseInfo : MouseEvent.MouseInfo -> Vec2
 positionFromMouseInfo { clientX, clientY, offsetX, offsetY } =
@@ -338,16 +349,7 @@ dragAudioModule thisPoint lastPoint id model =
       (AudioModule.translated <| delta lastPoint thisPoint )
       id
   , Dict.get id model.audioModules
-    |> Maybe.map (\am -> am.endpoints)
-    |> Maybe.map
-      ( Array.indexedMap
-        (\index endpoint -> Task.attempt
-          ( UpdateEndpointCoordinates (id, index) )
-          ( Dom.getElement endpoint.htmlId )
-        )
-      )
-    |> Maybe.map Array.toList
-    |> Maybe.map Cmd.batch
+    |> Maybe.map ( fetchAudioModuleEndpointMidpoints id )
     |> Maybe.withDefault Cmd.none
   )
 

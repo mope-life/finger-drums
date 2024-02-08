@@ -12,6 +12,7 @@ module AudioModule exposing
   , dragged
   , notDragged
   , mapEndpoint
+  , updateControlValue
   , viewPrototype
   , viewFloating
   , viewFixed
@@ -207,6 +208,17 @@ mapEndpoint transform index audioModule =
     Just endpoint ->
       { audioModule
       | endpoints = Array.set index (transform endpoint) audioModule.endpoints
+      }
+
+--------------------------------------------------------------------------------
+-- Update ----------------------------------------------------------------------
+updateControlValue : Int -> String -> AudioModule -> AudioModule
+updateControlValue index value audioModule =
+  case Array.get index audioModule.controls of
+    Nothing -> audioModule
+    Just control ->
+      { audioModule
+      | controls = Array.set index { control | value = value } audioModule.controls
       }
 
 --------------------------------------------------------------------------------
