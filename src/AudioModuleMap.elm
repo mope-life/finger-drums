@@ -70,12 +70,12 @@ type alias Model =
 
 type Msg
   = CreateAudioModule Type MouseEvent.MouseInfo
-  | CreateHalfConnection Id Int MouseEvent.MouseInfo
+  | CreateHalfConnection EndpointId MouseEvent.MouseInfo
   | StartDrag Draggable MouseEvent.MouseInfo
   | ContinueDrag MouseEvent.MouseInfo
   | EndDrag
-  | HoverEndpoint Id Int
-  | UnhoverEndpoint Id Int
+  | HoverEndpoint EndpointId
+  | UnhoverEndpoint EndpointId
   | UpdateEndpointCoordinates EndpointId (Result Dom.Error Dom.Element)
   | ControlClick String
   | ControlInput Id Int String
@@ -91,8 +91,8 @@ type Draggable
   | HalfConnection EndpointId Line
 
 type alias Connection =
-  { idIn : EndpointId
-  , idOut : EndpointId
+  { idOut : EndpointId
+  , idIn : EndpointId
   }
 
 type alias Line =
@@ -186,18 +186,18 @@ update msg model =
         ( createFloatingModule (positionFromMouseInfo mouseInfo) type_ model.nextId )
         mouseInfo
         model
-    CreateHalfConnection id index mouseInfo ->
-      snapAndStartDrag ( id, index ) mouseInfo model
+    CreateHalfConnection endpointId mouseInfo ->
+      snapAndStartDrag endpointId mouseInfo model
     StartDrag draggable mouseInfo ->
       onStartDrag draggable ( mousePoint mouseInfo ) model
     ContinueDrag mouseInfo ->
       onContinueDrag ( mousePoint mouseInfo ) model
     EndDrag ->
       onEndDrag model
-    HoverEndpoint id index ->
-      ( withHovered ( id, index ) model, Cmd.none )
-    UnhoverEndpoint id index ->
-      ( withoutHovered ( id, index ) model, Cmd.none )
+    HoverEndpoint endpointId ->
+      ( withHovered endpointId model, Cmd.none )
+    UnhoverEndpoint endpointId ->
+      ( withoutHovered endpointId model, Cmd.none )
     UpdateEndpointCoordinates endpointId result ->
       case result of
         Err _ -> ( model, Cmd.none )
@@ -297,11 +297,13 @@ createId id =
 createTranslators : Id -> Translators Msg
 createTranslators id =
   { startDrag = StartDrag (AudioModuleId id)
-  , createHalfConnection = CreateHalfConnection id
-  , hoverEndpoint = HoverEndpoint id
-  , unhoverEndpoint = UnhoverEndpoint id
   , controlClick = ControlClick
   , controlInput = ControlInput id
+  , endpointTranslators = \index ->
+    { createHalfConnection = CreateHalfConnection (id, index)
+    , hoverEndpoint = HoverEndpoint (id, index)
+    , unhoverEndpoint = UnhoverEndpoint (id, index)
+    }
   }
 
 snapAndStartDrag : EndpointId -> MouseEvent.MouseInfo -> Model -> ( Model, Cmd Msg )
@@ -386,7 +388,7 @@ findConnection halfConnection model =
     )
     Nothing
     ( Set.toList model.hovered )
-  |> Maybe.map (\conn -> push conn model.connections)
+  |> Maybe.map (\conn -> push conn model.connections )
   |> Maybe.map (\connections -> { model | connections = connections } )
   |> Maybe.withDefault model
 
@@ -398,7 +400,7 @@ attemptConnection id1 id2 model =
     ( endpointAt id2 model )
   |> Maybe.andThen orderConnection
   |> Maybe.andThen validateConnection
-  |> Maybe.map ( \( p1, p2 ) -> { idIn = p1.id, idOut = p2.id } )
+  |> Maybe.map (\( p1, p2 ) -> { idOut = p1.id, idIn = p2.id } )
 
 orderConnection :
   ( EndpointIdPair, EndpointIdPair )
@@ -406,7 +408,7 @@ orderConnection :
 orderConnection ( p1, p2 ) =
   if ( p1.endpoint.direction == p2.endpoint.direction )
   then Nothing
-  else if ( p1.endpoint.direction == AudioModule.Endpoint.In )
+  else if ( p1.endpoint.direction == AudioModule.Endpoint.Out )
   then Just ( p1, p2 )
   else Just ( p2, p1 )
 
@@ -450,9 +452,9 @@ viewConnectionMap model =
   model.connections
   |> List.filterMap
     (\c -> Maybe.map2
-      (\eIn eOut -> { endOne = eIn.midpoint, endTwo = eOut.midpoint } )
-      ( endpointAt c.idIn model )
+      (\eOut eIn -> { endOne = eOut.midpoint, endTwo = eIn.midpoint } )
       ( endpointAt c.idOut model )
+      ( endpointAt c.idIn model )
     )
   |> ( case model.dragState of
       Nothing -> identity

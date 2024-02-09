@@ -28,6 +28,7 @@ import AudioModule.Endpoint exposing (Endpoint)
 import AudioModule.Translators exposing (Translators)
 import MouseEvent
 import Utility exposing (..)
+import AudioModule.Translators exposing (EndpointTranslators)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -276,19 +277,27 @@ commonContents maybeTranslators endpoints controls =
 
 viewEndpointBank : Maybe ( Translators msg ) -> Endpoint.Direction -> Array Endpoint -> Html.Html msg
 viewEndpointBank maybeTranslators direction endpoints =
-  endpoints
-  |> Array.filter (\e -> e.direction == direction )
-  |> Array.indexedMap ( Endpoint.view maybeTranslators )
-  |>(\elements -> if Array.isEmpty elements
-    then [ ]
-    else
-      ( Html.text <| case direction of
-        Endpoint.In -> "in:"
-        Endpoint.Out -> "out:"
+  let
+    viewEndpoint index =
+      maybeTranslators
+      |> Maybe.map (\t -> t.endpointTranslators index)
+      |> Endpoint.view
+  in
+    endpoints
+    |> Array.toIndexedList
+    |> List.filter (\(_, endpoint) -> endpoint.direction == direction )
+    |> List.map ( apply2 viewEndpoint )
+    |>(\elements ->
+      if List.isEmpty elements
+      then [ ]
+      else
+        ( Html.text ( case direction of
+          Endpoint.In -> "in:"
+          Endpoint.Out -> "out:"
+        ) )
+        :: elements
       )
-      :: ( Array.toList elements )
-    )
-  |> Html.div [ Attributes.class "endpoint-bank" ]
+    |> Html.div [ Attributes.class "endpoint-bank" ]
 
 viewControlBank : Maybe ( Translators msg ) -> Array Control -> Html.Html msg
 viewControlBank maybeTranslators controls =

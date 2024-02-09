@@ -8,7 +8,7 @@ module AudioModule.Endpoint exposing
 import Html
 import Html.Attributes as Attributes
 import Html.Events as Events
-import AudioModule.Translators exposing (Translators)
+import AudioModule.Translators exposing (EndpointTranslators)
 import MouseEvent
 import Utility exposing (..)
 
@@ -29,17 +29,17 @@ type alias Endpoint =
 
 type Direction = In | Out
 
-view : Maybe ( Translators msg ) -> Int -> Endpoint -> Html.Html msg
-view maybeTranslators index endpoint =
+view : Maybe ( EndpointTranslators msg ) -> Endpoint -> Html.Html msg
+view maybeTranslators endpoint =
   Html.div
     [ Attributes.class "endpoint-wrapper" ]
     [ Html.div
       ( maybeTranslators
       |> Maybe.map
         (\{ createHalfConnection, hoverEndpoint, unhoverEndpoint } ->
-          [ MouseEvent.onCustom "mousedown" ( createHalfConnection index )
-          , Events.onMouseEnter ( hoverEndpoint index )
-          , Events.onMouseLeave ( unhoverEndpoint index )
+          [ MouseEvent.onCustom "mousedown" createHalfConnection
+          , Events.onMouseEnter hoverEndpoint
+          , Events.onMouseLeave unhoverEndpoint
           ]
         )
       |> Maybe.withDefault []
