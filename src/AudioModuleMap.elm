@@ -120,21 +120,11 @@ without id model =
 
 withDragged : Draggable -> Vec2 -> Model -> Model
 withDragged draggable start model =
-  { model
-  | dragState = Just { dragged = draggable, lastPoint = start }
-  }
-  |> case draggable of
-    AudioModuleId id -> mapAudioModule AudioModule.dragged id
-    HalfConnection _ _ -> identity
+  { model | dragState = Just { dragged = draggable, lastPoint = start } }
 
 withNothingDragged : Model -> Model
 withNothingDragged model =
   { model | dragState = Nothing }
-  |> case model.dragState of
-    Nothing -> identity
-    Just { dragged } -> case dragged of
-      AudioModuleId id -> mapAudioModule AudioModule.notDragged id
-      _ -> identity
 
 withNextId : Model -> Model
 withNextId model =
@@ -168,14 +158,15 @@ endpointAt (id, index) model =
 -- Subscriptions ---------------------------------------------------------------
 subscriptions : Model -> Sub Msg
 subscriptions { dragState } =
-  case dragState of
-    Nothing -> Sub.none
-    Just _ -> Sub.batch
+  let
+    subs = Sub.batch
       [ ContinueDrag
       |> Browser.Events.onMouseMove << MouseEvent.messageDecoder
       , EndDrag
       |> Browser.Events.onMouseUp << Decode.succeed
       ]
+  in
+    ifAnything subs Sub.none dragState
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
@@ -282,10 +273,7 @@ createPrototypeModule type_ id =
 
 createFloatingModule : Vec2 -> Type -> Id -> AudioModule
 createFloatingModule start type_=
-  AudioModule.init
-    ( Floating { dragState = AudioModule.NotDragged , position = start } )
-    type_
-    << createId
+  AudioModule.init ( Floating start ) type_ << createId
 
 createFixedModule : Type -> Id -> AudioModule
 createFixedModule type_ =
@@ -383,9 +371,11 @@ onEndDrag model =
 findConnection : EndpointId -> Model -> Model
 findConnection halfConnection model =
   List.foldl
-    (\endpointId maybeConnection -> case maybeConnection of
-      Just _ -> maybeConnection
-      Nothing -> attemptConnection halfConnection endpointId model
+    (\endpointId maybeConnection ->
+      ifAnything
+        maybeConnection
+        ( attemptConnection halfConnection endpointId model )
+        maybeConnection
     )
     Nothing
     ( Set.toList model.hovered )
@@ -442,7 +432,10 @@ updateEndpointCoordinate domElement endpointId model =
 view : Model -> Html.Html Msg
 view model =
   Html.div
-    [ Attributes.id "audio-module-map" ]
+    [ Attributes.id "audio-module-map"
+    , Attributes.classList
+      [ ( "dragging", ( ifAnything True False model.dragState ) ) ]
+    ]
     ( viewConnectionMap model
     :: viewPrototypeBank model.prototypes
     :: viewAudioModules model.audioModules
@@ -457,7 +450,7 @@ viewConnectionMap model =
       ( endpointAt c.idOut model )
       ( endpointAt c.idIn model )
     )
-  |> ( case model.dragState of
+  |>( case model.dragState of
       Nothing -> identity
       Just { dragged } -> case dragged of
         HalfConnection _ line -> push line

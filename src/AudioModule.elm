@@ -3,14 +3,10 @@ module AudioModule exposing
   , PrototypeModule
   , Type(..)
   , Mode(..)
-  , PositionInfo
-  , DragState(..)
   , init
   , initPrototype
   , at
   , translated
-  , dragged
-  , notDragged
   , mapEndpoint
   , updateControlValue
   , viewPrototype
@@ -28,7 +24,6 @@ import AudioModule.Endpoint exposing (Endpoint)
 import AudioModule.Translators exposing (Translators)
 import MouseEvent
 import Utility exposing (..)
-import AudioModule.Translators exposing (EndpointTranslators)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -146,15 +141,8 @@ type alias PrototypeModule =
   }
 
 type Mode
-  = Floating PositionInfo
+  = Floating Vec2
   | Fixed
-
-type alias PositionInfo =
-  { dragState : DragState
-  , position : Vec2
-  }
-
-type DragState = Dragged | NotDragged
 
 type Type
   = KeyboardModule
@@ -164,40 +152,22 @@ type Type
   | VCAModule
   | EnvelopeModule
 
-dragged : AudioModule -> AudioModule
-dragged audioModule =
-  case audioModule.mode of
-    Floating posinfo ->
-      { audioModule | mode = Floating { posinfo | dragState = Dragged } }
-    _ ->
-      audioModule
-
-notDragged : AudioModule -> AudioModule
-notDragged audioModule =
-  case audioModule.mode of
-    Floating posinfo ->
-      { audioModule | mode = Floating { posinfo | dragState = NotDragged } }
-    _ ->
-      audioModule
-
 at : Vec2 -> AudioModule -> AudioModule
 at position audioModule =
   case audioModule.mode of
-    Floating posinfo ->
-      { audioModule | mode = Floating { posinfo | position = position } }
+    Floating _ ->
+      { audioModule | mode = Floating position }
     _ ->
       audioModule
 
 translated : (Float, Float) -> AudioModule -> AudioModule
 translated (dx, dy) audioModule =
   case audioModule.mode of
-    Floating posinfo ->
-      { audioModule
-        | mode = Floating
-          { posinfo
-          | position = (Tuple.mapBoth (\x -> x + dx) (\y -> y + dy) posinfo.position)
-          }
-      }
+    Floating position ->
+      let
+        newpos = Tuple.mapBoth (\x -> x + dx) (\y -> y + dy) position
+      in
+        { audioModule | mode = Floating newpos }
     _ ->
       audioModule
 
@@ -224,8 +194,8 @@ updateControlValue index value audioModule =
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
-viewFloating : PositionInfo -> Translators msg -> AudioModule -> Html.Html msg
-viewFloating { position, dragState } translators audioModule =
+viewFloating : Vec2 -> Translators msg -> AudioModule -> Html.Html msg
+viewFloating position translators audioModule =
   let
     pxFromFloat = \float -> ( String.fromInt << round <| float ) ++ "px"
     ( xpx, ypx ) = Tuple.mapBoth pxFromFloat pxFromFloat position
@@ -237,9 +207,6 @@ viewFloating { position, dragState } translators audioModule =
         , Attributes.style "top" ypx
         , MouseEvent.onCustom "mousedown" translators.startDrag
         ]
-      , case dragState of
-        Dragged -> [ Attributes.class "grabbing" ]
-        NotDragged -> [ ]
       ]
     )
     ( commonContents ( Just translators ) audioModule.endpoints audioModule.controls )

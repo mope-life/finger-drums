@@ -112,17 +112,16 @@ body {
   z-index: 100;
 }
 
+#audio-module-map.dragging, #audio-module-map.dragging * {
+  cursor: grabbing !important;
+}
+
 #controller-bank > .audio-module {
   width: min-content;
   height: min-content;
   padding: 10px;
   border-right: 2px dotted var(--module-background);
   flex-direction: column-reverse;
-}
-
-.audio-module.dragging {
-  cursor: grabbing;
-  z-index: 1000 !important;
 }
 
 .endpoint-jack {
