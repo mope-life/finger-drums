@@ -34,6 +34,7 @@ init _ =
   let
     initialModules =
       [ createFixedModule KeyboardModule
+      , createFixedModule DestinationModule
       ]
       |> List.indexedMap (\i f -> (i, f i) )
       |> Dict.fromList
@@ -493,7 +494,7 @@ viewAudioModules audioModules =
 
 collectAudioModules : Dict Id AudioModule -> ( ( List (Html.Html Msg) ), ( List (Html.Html Msg) ) )
 collectAudioModules =
-  List.foldl
+  List.foldr
     (\(id, audioModule) ->
       case audioModule.mode of
         Floating posinfo ->

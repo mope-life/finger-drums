@@ -86,7 +86,9 @@ body {
 
 #controller-bank {
   position: relative;
-  display: inline-block;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
   height: min-content;
   background: var(--prototype-bank-background);
   flex: 1;
