@@ -11,7 +11,17 @@ push a list =
   a :: list
 
 ifAnything : b -> b -> Maybe a -> b
-ifAnything true false maybe =
+ifAnything onAnything onNothing maybe =
   case maybe of
-    Just _ -> true
-    Nothing -> false
+    Just _ -> onAnything
+    Nothing -> onNothing
+
+ifNothing : Maybe a -> Maybe a -> Maybe a
+ifNothing onNothing maybe =
+  ifAnything maybe onNothing maybe
+
+findFirstValid : ( a -> Maybe b) -> List a -> Maybe b
+findFirstValid transform =
+  List.foldl
+    ( \a -> ifNothing ( transform a ) )
+    Nothing

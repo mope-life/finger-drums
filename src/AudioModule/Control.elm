@@ -15,7 +15,7 @@ import Json.Encode as Encode
 import Html
 import Html.Events as Events
 import Html.Attributes as Attributes
-import AudioModule.Translators exposing (Translators)
+import AudioModule.Translators exposing (ControlTranslators)
 
 initControlGroup : List Control -> String -> Control
 initControlGroup controls =
@@ -91,16 +91,16 @@ type alias KnobParameters =
   , intervals : Maybe Int
   }
 
-view : Maybe ( Translators msg ) -> Int -> Control -> Html.Html msg
-view maybeTranslators index control =
+view : Maybe ( ControlTranslators msg ) -> Control -> Html.Html msg
+view maybeTranslators control =
   let
-    input = viewInput maybeTranslators index control
+    input = viewInput maybeTranslators control
   in case control.label of
     Nothing -> input
     Just label -> Html.label [ ] [ Html.text label, input ]
 
-viewInput : Maybe ( Translators msg ) -> Int -> Control -> Html.Html msg
-viewInput maybeTranslators index { htmlId, input, value } =
+viewInput : Maybe ( ControlTranslators msg ) -> Control -> Html.Html msg
+viewInput maybeTranslators { htmlId, input, value } =
   case input of
     Radio { group } ->
       Html.input
@@ -111,7 +111,7 @@ viewInput maybeTranslators index { htmlId, input, value } =
           ] ++
           ( case maybeTranslators of
             Nothing -> [ ]
-            Just { controlInput } -> [ Events.onInput ( controlInput index ) ]
+            Just { controlInput } -> [ Events.onInput controlInput ]
           )
         )
         [ ]
@@ -130,7 +130,7 @@ viewInput maybeTranslators index { htmlId, input, value } =
           Nothing ->
             [ ]
           Just { controlInput, controlClick } ->
-            [ Events.onInput ( controlInput index )
+            [ Events.onInput controlInput
             , Events.onClick ( controlClick htmlId )
             ]
         ] )
@@ -149,7 +149,7 @@ viewInput maybeTranslators index { htmlId, input, value } =
           Nothing ->
             [ ]
           Just { controlInput } ->
-            [ Events.on "input" ( knobInputDecoder ( controlInput index ) ) ]
+            [ Events.on "input" ( knobInputDecoder controlInput ) ]
         ] )
         [ ]
     Keyboard ->
@@ -157,7 +157,7 @@ viewInput maybeTranslators index { htmlId, input, value } =
     ControlGroup controls ->
       Html.div
         [ Attributes.class "input-group" ]
-        ( Array.map ( view maybeTranslators index ) controls |> Array.toList )
+        ( Array.map ( view maybeTranslators ) controls |> Array.toList )
 
 knobInputDecoder : (String -> msg) -> Decode.Decoder msg
 knobInputDecoder delegate =

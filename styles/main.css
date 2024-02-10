@@ -1,7 +1,7 @@
 :root {
   --wire-color: yellow;
   --wire-hover-color: #ffff0080;
-  --piano-key-color:#ffffe8;
+  --piano-key-color: #ffffe8;
   --key-border-radius: 0.5em;
   --map-background: #141414;
   --module-background: #777;
@@ -39,7 +39,7 @@ body {
 }
 
 #connection-map line {
-  cursor: url(../assets/scissors.svg) 10 3, auto;
+  /* cursor: url(../assets/scissors.svg) 10 3, auto; */
   stroke: var(--wire-color);
   stroke-width: 3;
 }
@@ -71,7 +71,7 @@ body {
   overflow: scroll;
 }
 
-#prototype-bank > .audio-module {
+#prototype-bank>.audio-module {
   position: relative;
 }
 
@@ -100,23 +100,23 @@ body {
   align-items: stretch;
 }
 
-#prototype-bank > .audio-module,
-#audio-module-map > .audio-module {
+#prototype-bank>.audio-module,
+#audio-module-map>.audio-module {
   background: var(--module-background);
   border: var(--module-border);
-  cursor: grab;
 }
 
-#audio-module-map > .audio-module {
+#audio-module-map>.audio-module {
   position: absolute;
   z-index: 100;
 }
 
-#audio-module-map.dragging, #audio-module-map.dragging * {
+#audio-module-map.dragging,
+#audio-module-map.dragging .grabbable {
   cursor: grabbing !important;
 }
 
-#controller-bank > .audio-module {
+#controller-bank>.audio-module {
   width: min-content;
   height: min-content;
   padding: 10px;
@@ -155,7 +155,7 @@ body {
   box-sizing: content-box;
 }
 
-#controller-bank > .audio-module .endpoint-bank {
+#controller-bank>.audio-module .endpoint-bank {
   border: none;
   width: 100%;
   flex-direction: row;
@@ -177,7 +177,8 @@ body {
   width: 6ch;
 }
 
-.control-bank, .input-group {
+.control-bank,
+.input-group {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -190,10 +191,6 @@ body {
 
 .grabbable {
   cursor: grab;
-}
-
-.grabbing {
-  cursor: grabbing !important;
 }
 
 keys-control {
@@ -219,7 +216,8 @@ input[type=number] {
 }
 
 /*Hide the arrows on inputs (polyfill)*/
-input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }

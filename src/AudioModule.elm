@@ -84,16 +84,18 @@ initControls type_ parentHtmlId =
 initEndpoints : Type -> String -> Array Endpoint
 initEndpoints type_ parentHtmlId =
   let
+    makeHtmlId direction label =
+      ( String.concat
+        [ parentHtmlId
+        , case direction of
+          Endpoint.In -> "-endpoint-in-"
+          Endpoint.Out -> "-endpoint-out-"
+        , label
+        ]
+      )
     initialize direction label =
-      Endpoint.init direction label
-        ( String.concat
-          [ parentHtmlId
-          , case direction of
-            Endpoint.In -> "-endpoint-in-"
-            Endpoint.Out -> "-endpoint-out-"
-          , label
-          ]
-        )
+      Endpoint.init direction label ( makeHtmlId direction label )
+
   in ( case type_ of
     KeyboardModule ->
       [ initialize Endpoint.Out "freq"
@@ -205,6 +207,7 @@ viewFloating position translators audioModule =
       [ commonAttributes audioModule.htmlId
       , [ Attributes.style "left" xpx
         , Attributes.style "top" ypx
+        , Attributes.class "grabbable"
         , MouseEvent.onCustom "mousedown" translators.startDrag
         ]
       ]
@@ -223,6 +226,7 @@ viewPrototype createAudioModule prototype =
     ( commonAttributes prototype.htmlId )
     ( Html.div
       [ Attributes.class "prototype-click-shield"
+      , Attributes.class "grabbable"
       , MouseEvent.onCustom "mousedown" ( createAudioModule prototype.type_ )
       ]
       [ ]
@@ -247,7 +251,7 @@ viewEndpointBank maybeTranslators direction endpoints =
   let
     viewEndpoint index =
       maybeTranslators
-      |> Maybe.map (\t -> t.endpointTranslators index)
+      |> Maybe.map (\t -> t.endpointTranslators index )
       |> Endpoint.view
   in
     endpoints
@@ -268,6 +272,12 @@ viewEndpointBank maybeTranslators direction endpoints =
 
 viewControlBank : Maybe ( Translators msg ) -> Array Control -> Html.Html msg
 viewControlBank maybeTranslators controls =
-  Html.div
-    [ Attributes.class "control-bank" ]
-    ( Array.indexedMap ( Control.view maybeTranslators ) controls |> Array.toList )
+  let
+    viewControl index =
+      maybeTranslators
+      |> Maybe.map (\t -> t.controlTranslators index )
+      |> Control.view
+  in
+    Html.div
+      [ Attributes.class "control-bank" ]
+      ( Array.indexedMap viewControl controls |> Array.toList )
