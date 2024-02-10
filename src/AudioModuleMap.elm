@@ -17,7 +17,6 @@ import AudioModule exposing (AudioModule, PrototypeModule, Type(..), Mode(..))
 import AudioModule.Translators exposing (Translators)
 import AudioModule.Endpoint exposing (Endpoint)
 import Utility exposing (..)
-import Html.Attributes exposing (draggable)
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -55,7 +54,7 @@ init _ =
       , hovered = Set.empty
       , nextId = Dict.size initialModules
       }
-    cmd = initializeEndpoints model
+    cmd = fetchAllEndpointDeltas initialModules
   in
     ( model, cmd )
 
@@ -72,9 +71,6 @@ type alias Model =
 
 type Msg
   = CreateAudioModule Type MouseEvent.MouseInfo
-  | UpdateEndpointMidpoint EndpointId (Result Dom.Error Dom.Element)
-  | FocusResult (Result Dom.Error ())
-  | Reinitialize
   -- Drag messages
   | StartDrag Draggable MouseEvent.MouseInfo
   | ContinueDrag MouseEvent.MouseInfo
@@ -83,9 +79,12 @@ type Msg
   | CreateHalfConnection EndpointId MouseEvent.MouseInfo
   | HoverEndpoint EndpointId
   | UnhoverEndpoint EndpointId
+  | FetchEndpointDeltas
+  | SetEndpointDelta EndpointId (Result Dom.Error (List Dom.Element))
   -- Control messages
   | ClickControl ControlId String
-  | InputControl ControlId String
+  | SetControlValue ControlId String
+  | Focus (Result Dom.Error ())
 
 type alias DragState =
   { dragged : Draggable
@@ -145,140 +144,13 @@ withoutHovered endpointId model =
 
 mapAudioModule : (AudioModule -> AudioModule) -> AudioModuleId -> Model -> Model
 mapAudioModule transform id model =
-  case (Dict.get id model.audioModules) of
-    Nothing -> model
-    Just audioModule -> with id (transform audioModule) model
-
-mapEndpoint : (Endpoint -> Endpoint) -> EndpointId -> Model -> Model
-mapEndpoint transform ( id, index ) =
-  mapAudioModule ( AudioModule.mapEndpoint transform index ) id
+  { model | audioModules = wrapAndMap wrapDict transform id model.audioModules }
 
 endpointAt : EndpointId -> Model -> Maybe Endpoint
 endpointAt (id, index) model =
   Dict.get id model.audioModules
   |> Maybe.map ( \am -> am.endpoints )
   |> Maybe.andThen ( Array.get index )
-
---------------------------------------------------------------------------------
--- Subscriptions ---------------------------------------------------------------
-subscriptions : Model -> Sub Msg
-subscriptions { dragState } =
-  let
-    defaultSubs =
-      [ Browser.Events.onResize (\_ _ -> Reinitialize )
-      ]
-    mouseSubs =
-      [ ContinueDrag
-      |> Browser.Events.onMouseMove << MouseEvent.messageDecoder
-      , EndDrag
-      |> Browser.Events.onMouseUp << Decode.succeed
-      ]
-      ++ defaultSubs
-  in
-    Sub.batch ( ifAnything mouseSubs defaultSubs dragState )
-
---------------------------------------------------------------------------------
--- Update ----------------------------------------------------------------------
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-  case msg of
-    CreateAudioModule type_ mouseInfo ->
-      ( insertAndStartDrag
-        ( createFloatingModule (positionFromMouseInfo mouseInfo) type_ model.nextId )
-        mouseInfo
-        model
-      , Cmd.none
-      )
-    UpdateEndpointMidpoint endpointId result ->
-      ( case result of
-        Err _ -> model
-        Ok domElement -> updateEndpointCoordinate domElement endpointId model
-      , Cmd.none
-      )
-    FocusResult _ ->
-      ( model, Cmd.none )
-    Reinitialize ->
-      ( model, initializeEndpoints model )
-    StartDrag draggable mouseInfo ->
-      ( withDragged draggable ( mousePoint mouseInfo ) model, Cmd.none )
-    ContinueDrag mouseInfo ->
-      onContinueDrag ( mousePoint mouseInfo ) model
-    EndDrag ->
-      ( endDrag model, Cmd.none )
-    HoverEndpoint endpointId ->
-      ( withHovered endpointId model, Cmd.none )
-    UnhoverEndpoint endpointId ->
-      ( withoutHovered endpointId model, Cmd.none )
-    CreateHalfConnection endpointId mouseInfo ->
-      ( snapAndStartDrag endpointId mouseInfo model, Cmd.none )
-    ClickControl _ htmlId ->
-      ( model, Task.attempt FocusResult ( Dom.focus htmlId ) )
-    InputControl ( id, index ) value ->
-      ( mapAudioModule (AudioModule.updateControlValue index value) id model
-      , Cmd.none
-      )
-
-initializeEndpoints : Model -> Cmd Msg
-initializeEndpoints model =
-  model.audioModules
-  |> Dict.toList
-  |> List.map ( apply2 fetchAudioModuleEndpointMidpoints )
-  |> Cmd.batch
-
-fetchAudioModuleEndpointMidpoints : AudioModuleId -> AudioModule -> Cmd Msg
-fetchAudioModuleEndpointMidpoints id audioModule =
-  audioModule.endpoints
-  |> Array.indexedMap (\index -> fetchEndpointMidpoint ( id, index ) )
-  |> Array.toList
-  |> Cmd.batch
-
-fetchEndpointMidpoint : EndpointId -> Endpoint -> Cmd Msg
-fetchEndpointMidpoint endpointId endpoint =
-  Task.attempt
-    ( UpdateEndpointMidpoint endpointId )
-    ( Dom.getElement endpoint.htmlId )
-
-positionFromMouseInfo : MouseEvent.MouseInfo -> Vec2
-positionFromMouseInfo { clientX, clientY, offsetX, offsetY } =
-  ( clientX - offsetX
-  , clientY - offsetY
-  )
-
-dimensionsFromMouseInfo : MouseEvent.MouseInfo -> Vec2
-dimensionsFromMouseInfo { targetWidth, targetHeight } =
-  ( targetWidth, targetHeight )
-
-midpointFromMouseInfo : MouseEvent.MouseInfo -> Vec2
-midpointFromMouseInfo mouseInfo =
-  midpointOf mouseInfo positionFromMouseInfo dimensionsFromMouseInfo
-
-positionFromDomElement : Dom.Element -> Vec2
-positionFromDomElement domElement =
-  ( domElement.element.x, domElement.element.y )
-
-dimensionsFromDomElement : Dom.Element -> Vec2
-dimensionsFromDomElement domElement =
-  ( domElement.element.width, domElement.element.height )
-
-midpointFromDomElement : Dom.Element -> Vec2
-midpointFromDomElement domElement =
-  midpointOf domElement positionFromDomElement dimensionsFromDomElement
-
-midpointOf : t -> ( t -> Vec2 ) -> ( t -> Vec2 ) -> Vec2
-midpointOf thing getPosition getDimensions =
-  let
-    ( x, y ) = ( getPosition thing )
-    ( width, height ) = ( getDimensions thing )
-  in
-    ( x + width / 2, y + height / 2 )
-
-mousePoint : MouseEvent.MouseInfo -> Vec2
-mousePoint { clientX, clientY } =
-  ( clientX, clientY )
-
-delta : Vec2 -> Vec2 -> Vec2
-delta (x1, y1) (x2, y2) =
-  (x2 - x1, y2 - y1)
 
 createPrototypeModule : Type -> AudioModuleId -> PrototypeModule
 createPrototypeModule type_ id =
@@ -296,75 +168,128 @@ createId : AudioModuleId -> String
 createId id =
   "module-" ++ ( String.fromInt id )
 
-createTranslators : AudioModuleId -> Translators Msg
-createTranslators id =
-  { startDrag = StartDrag (FloatingModule id)
-  , controlTranslators = \index ->
-    { controlClick = ClickControl (id, index)
-    , controlInput = InputControl (id, index)
-    }
-  , endpointTranslators = \index ->
-    { createHalfConnection = CreateHalfConnection (id, index)
-    , hoverEndpoint = HoverEndpoint (id, index)
-    , unhoverEndpoint = UnhoverEndpoint (id, index)
-    }
-  }
+--------------------------------------------------------------------------------
+-- Subscriptions ---------------------------------------------------------------
+subscriptions : Model -> Sub Msg
+subscriptions { dragState } =
+  let
+    defaultSubs =
+      [ Browser.Events.onResize (\_ _ -> FetchEndpointDeltas )
+      ]
+    mouseSubs =
+      [ ContinueDrag
+      |> Browser.Events.onMouseMove << MouseEvent.messageDecoder
+      , EndDrag
+      |> Browser.Events.onMouseUp << Decode.succeed
+      ]
+      ++ defaultSubs
+  in
+    Sub.batch ( ifAnything mouseSubs defaultSubs dragState )
+
+--------------------------------------------------------------------------------
+-- Update ----------------------------------------------------------------------
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+  case msg of
+    CreateAudioModule type_ mouseInfo ->
+      let
+        id = model.nextId
+        position = positionFromMouseInfo mouseInfo
+        audioModule = createFloatingModule position type_ id
+      in
+        ( insertAndStartDrag audioModule mouseInfo model
+        , fetchEndpointDeltas id audioModule
+        )
+    StartDrag draggable mouseInfo ->
+      ( withDragged draggable ( mousePoint mouseInfo ) model, Cmd.none )
+    ContinueDrag mouseInfo ->
+      ( continueDrag ( mousePoint mouseInfo ) model, Cmd.none )
+    EndDrag ->
+      ( endDrag model, Cmd.none )
+    HoverEndpoint endpointId ->
+      ( withHovered endpointId model, Cmd.none )
+    UnhoverEndpoint endpointId ->
+      ( withoutHovered endpointId model, Cmd.none )
+    FetchEndpointDeltas ->
+      ( model, fetchAllEndpointDeltas model.audioModules )
+    SetEndpointDelta endpointId result ->
+      ( setEndpointDelta endpointId result model, Cmd.none )
+    CreateHalfConnection endpointId mouseInfo ->
+      ( snapAndStartDrag endpointId mouseInfo model, Cmd.none )
+    ClickControl _ htmlId ->
+      ( model, Task.attempt Focus ( Dom.focus htmlId ) )
+    SetControlValue controlId value ->
+      ( setControlValue controlId value model, Cmd.none )
+    Focus _ -> ( model, Cmd.none )
+
+fetchAllEndpointDeltas : Dict AudioModuleId AudioModule -> Cmd Msg
+fetchAllEndpointDeltas audioModules =
+  Dict.toList audioModules
+  |> List.map ( apply2 fetchEndpointDeltas )
+  |> Cmd.batch
+
+fetchEndpointDeltas : AudioModuleId -> AudioModule -> Cmd Msg
+fetchEndpointDeltas id audioModule =
+  audioModule.endpoints
+  |> Array.indexedMap
+    (\index endpoint ->
+      SetEndpointDelta (id, index)
+      |> fetchElements [ endpoint.htmlId, audioModule.htmlId ]
+    )
+  |> Array.toList
+  |> Cmd.batch
+
+setEndpointDelta : EndpointId -> Result Dom.Error ( List Dom.Element ) -> Model -> Model
+setEndpointDelta (id, index) result =
+  case result of
+    Ok [ endpointElement, audioModuleElement ] ->
+      mapAudioModule
+        ( AudioModule.updateEndpointDelta endpointElement audioModuleElement
+          index
+        )
+        id
+    _ -> identity
 
 snapAndStartDrag : EndpointId -> MouseEvent.MouseInfo -> Model -> Model
 snapAndStartDrag endpointId mouseInfo =
-  withDragged
-    ( HalfConnection
-      endpointId
-      ( createLine ( midpointFromMouseInfo mouseInfo ) )
-    )
-    ( mousePoint mouseInfo )
+  let
+    start = midpointFromMouseInfo mouseInfo
+    newLine = { endOne = start, endTwo = start }
+  in
+    withDragged ( HalfConnection endpointId newLine ) ( mousePoint mouseInfo )
 
 insertAndStartDrag : AudioModule -> MouseEvent.MouseInfo -> Model -> Model
 insertAndStartDrag audioModule mouseInfo model =
-  withDragged
-    ( FloatingModule model.nextId )
-    ( mousePoint mouseInfo )
-    ( model
-    |> with model.nextId audioModule
-    |> withNextId
-    )
+  with model.nextId audioModule model
+  |> withDragged ( FloatingModule model.nextId ) ( mousePoint mouseInfo )
+  |> withNextId
 
-onContinueDrag : Vec2 -> Model -> ( Model, Cmd Msg )
-onContinueDrag point model =
+continueDrag : Vec2 -> Model -> Model
+continueDrag point model =
   case model.dragState of
-    Nothing -> ( model, Cmd.none )
+    Nothing -> model
     Just { dragged, lastPoint } -> case dragged of
       FloatingModule id ->
         dragAudioModule point lastPoint id model
       HalfConnection halfConnection line ->
         dragLine point halfConnection line model
 
-dragAudioModule : Vec2 -> Vec2 -> AudioModuleId -> Model -> ( Model, Cmd Msg )
+dragAudioModule : Vec2 -> Vec2 -> AudioModuleId -> Model -> Model
 dragAudioModule thisPoint lastPoint id model =
-  ( { model
-    | dragState = Just
-      { dragged = FloatingModule id
-      , lastPoint = thisPoint
-      }
+  { model | dragState = Just
+    { dragged = FloatingModule id
+    , lastPoint = thisPoint
     }
-    |> mapAudioModule
-      (AudioModule.translated <| delta lastPoint thisPoint )
-      id
-  , Dict.get id model.audioModules
-    |> Maybe.map ( fetchAudioModuleEndpointMidpoints id )
-    |> Maybe.withDefault Cmd.none
-  )
+  }
+  |> mapAudioModule (AudioModule.translated <| delta lastPoint thisPoint ) id
 
-dragLine : Vec2 -> EndpointId -> Line -> Model -> ( Model, Cmd Msg )
+dragLine : Vec2 -> EndpointId -> Line -> Model -> Model
 dragLine thisPoint endpointId line model =
-  ( { model
-    | dragState = Just
-      { dragged = HalfConnection endpointId (adjustLine thisPoint line)
-      , lastPoint = thisPoint
-      }
+  { model | dragState = Just
+    { dragged = HalfConnection endpointId { line | endTwo = thisPoint }
+    , lastPoint = thisPoint
     }
-  , Cmd.none
-  )
+  }
 
 endDrag : Model -> Model
 endDrag model =
@@ -394,8 +319,8 @@ attemptConnection id1 id2 model =
   in
     Maybe.map2 Tuple.pair ( toPair id1 ) ( toPair id2 )
     |> Maybe.andThen orderConnection
-    >> Maybe.andThen validateConnection
-    >> Maybe.map (\(pOut, pIn) -> { idOut = pOut.id, idIn = pIn.id } )
+    |> Maybe.andThen validateConnection
+    |> Maybe.map makeConnection
 
 orderConnection :
   ( EndpointIdPair, EndpointIdPair )
@@ -408,25 +333,19 @@ orderConnection ( p1, p2 ) =
     else Just ( p2, p1 )
   )
 
+-- TODO: validate the connection
 validateConnection :
   ( EndpointIdPair, EndpointIdPair )
   -> Maybe ( EndpointIdPair, EndpointIdPair )
-validateConnection =
-  -- TODO validate the connection
-  Just << identity
+validateConnection = Just
 
-createLine : Vec2 -> Line
-createLine start =
-  { endOne = start, endTwo = start }
+makeConnection : ( EndpointIdPair, EndpointIdPair ) -> Connection
+makeConnection ( pOut, pIn ) =
+  { idOut = pOut.id, idIn = pIn.id }
 
-adjustLine : Vec2 -> Line -> Line
-adjustLine end line =
-  { line | endTwo = end }
-
-updateEndpointCoordinate : Dom.Element -> EndpointId -> Model -> Model
-updateEndpointCoordinate domElement =
-  mapEndpoint
-    (\endpoint -> { endpoint | midpoint = midpointFromDomElement domElement } )
+setControlValue : ControlId -> String -> Model -> Model
+setControlValue ( id, index ) value =
+  mapAudioModule (AudioModule.updateControlValue value index) id
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
@@ -483,23 +402,41 @@ viewAudioModules audioModules =
   let
     ( floating, fixed ) = collectAudioModules audioModules
   in
-    viewControllerBank fixed
-    :: floating
-
-collectAudioModules : Dict AudioModuleId AudioModule -> ( ( List (Html.Html Msg) ), ( List (Html.Html Msg) ) )
-collectAudioModules =
-  List.foldr
-    (\(id, audioModule) ->
-      case audioModule.mode of
-        Floating posinfo ->
-          Tuple.mapFirst (push <| AudioModule.viewFloating posinfo (createTranslators id) audioModule)
-        Fixed ->
-          Tuple.mapSecond (push <| AudioModule.viewFixed (createTranslators id) audioModule)
-    )
-    ( [ ], [ ] )
-    << Dict.toList
+    viewControllerBank fixed :: floating
 
 viewControllerBank : List ( Html.Html Msg ) -> Html.Html Msg
 viewControllerBank =
   Html.div [ Attributes.id "controller-bank" ]
 
+collectAudioModules :
+  Dict AudioModuleId AudioModule
+  -> ( ( List (Html.Html Msg) ), ( List (Html.Html Msg) ) )
+collectAudioModules =
+  List.foldr
+    (\(id, audioModule) ->
+      case audioModule.mode of
+        Floating posinfo -> Tuple.mapFirst
+          ( AudioModule.viewFloating posinfo (createTranslators id) audioModule
+          |> push
+          )
+        Fixed -> Tuple.mapSecond
+          ( AudioModule.viewFixed (createTranslators id) audioModule
+          |> push
+          )
+    )
+    ( [ ], [ ] )
+  << Dict.toList
+
+createTranslators : AudioModuleId -> Translators Msg
+createTranslators id =
+  { startDrag = StartDrag (FloatingModule id)
+  , controlTranslators = \index ->
+    { controlClick = ClickControl (id, index)
+    , controlInput = SetControlValue (id, index)
+    }
+  , endpointTranslators = \index ->
+    { createHalfConnection = CreateHalfConnection (id, index)
+    , hoverEndpoint = HoverEndpoint (id, index)
+    , unhoverEndpoint = UnhoverEndpoint (id, index)
+    }
+  }

@@ -2,6 +2,8 @@ module AudioModule.Endpoint exposing
   ( Endpoint
   , Direction(..)
   , init
+  , atDelta
+  , updateMidpoint
   , view
   )
 
@@ -18,6 +20,7 @@ init direction label htmlId =
   , direction = direction
   , label = label
   , midpoint = ( 0, 0 )
+  , delta = ( 0, 0 )
   }
 
 type alias Endpoint =
@@ -25,9 +28,22 @@ type alias Endpoint =
   , direction : Direction
   , label : String
   , midpoint : Vec2
+  , delta : Vec2
   }
 
 type Direction = In | Out
+
+atDelta : Vec2 -> Vec2 -> Endpoint -> Endpoint
+atDelta parentPosition newDelta endpoint =
+  { endpoint | delta = newDelta }
+  |> updateMidpoint parentPosition
+
+updateMidpoint : Vec2 -> Endpoint -> Endpoint
+updateMidpoint ( parentX, parentY ) endpoint =
+  let
+    ( dx, dy ) = endpoint.delta
+  in
+    { endpoint | midpoint = ( parentX + dx, parentY + dy ) }
 
 view : Maybe ( EndpointTranslators msg ) -> Endpoint -> Html.Html msg
 view maybeTranslators endpoint =

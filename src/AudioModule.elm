@@ -9,6 +9,7 @@ module AudioModule exposing
   , translated
   , mapEndpoint
   , updateControlValue
+  , updateEndpointDelta
   , viewPrototype
   , viewFloating
   , viewFixed
@@ -24,6 +25,7 @@ import AudioModule.Endpoint exposing (Endpoint)
 import AudioModule.Translators exposing (Translators)
 import MouseEvent
 import Utility exposing (..)
+import Browser.Dom as Dom
 
 --------------------------------------------------------------------------------
 -- Initialization --------------------------------------------------------------
@@ -158,7 +160,10 @@ at : Vec2 -> AudioModule -> AudioModule
 at position audioModule =
   case audioModule.mode of
     Floating _ ->
-      { audioModule | mode = Floating position }
+      { audioModule
+      | mode = Floating position
+      , endpoints = Array.map (Endpoint.updateMidpoint position) audioModule.endpoints
+      }
     _ ->
       audioModule
 
@@ -169,30 +174,41 @@ translated (dx, dy) audioModule =
       let
         newpos = Tuple.mapBoth (\x -> x + dx) (\y -> y + dy) position
       in
-        { audioModule | mode = Floating newpos }
+        { audioModule
+        | mode = Floating newpos
+        , endpoints = Array.map (Endpoint.updateMidpoint newpos) audioModule.endpoints
+        }
     _ ->
       audioModule
 
 mapEndpoint : ( Endpoint -> Endpoint ) -> Int -> AudioModule -> AudioModule
 mapEndpoint transform index audioModule =
-  case (Array.get index audioModule.endpoints) of
-    Nothing ->
-      audioModule
-    Just endpoint ->
-      { audioModule
-      | endpoints = Array.set index (transform endpoint) audioModule.endpoints
-      }
+  { audioModule
+  | endpoints = wrapAndMap wrapArray transform index audioModule.endpoints
+  }
+
+mapControl : ( Control -> Control ) -> Int -> AudioModule -> AudioModule
+mapControl transform index audioModule =
+  { audioModule
+  | controls = wrapAndMap wrapArray transform index audioModule.controls
+  }
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
-updateControlValue : Int -> String -> AudioModule -> AudioModule
-updateControlValue index value audioModule =
-  case Array.get index audioModule.controls of
-    Nothing -> audioModule
-    Just control ->
-      { audioModule
-      | controls = Array.set index { control | value = value } audioModule.controls
-      }
+updateControlValue : String -> Int -> AudioModule -> AudioModule
+updateControlValue value =
+  mapControl (\control -> { control | value = value } )
+
+updateEndpointDelta : Dom.Element -> Dom.Element -> Int -> AudioModule -> AudioModule
+updateEndpointDelta endpointElement audioModuleElement =
+  let
+    endpointMidpoint = midpointFromDomElement endpointElement
+    audioModulePosition = positionFromDomElement audioModuleElement
+  in
+    mapEndpoint
+      ( delta audioModulePosition endpointMidpoint
+      |> Endpoint.atDelta audioModulePosition
+      )
 
 --------------------------------------------------------------------------------
 -- View ------------------------------------------------------------------------
@@ -250,12 +266,10 @@ viewEndpointBank : Maybe ( Translators msg ) -> Endpoint.Direction -> Array Endp
 viewEndpointBank maybeTranslators direction endpoints =
   let
     viewEndpoint index =
-      maybeTranslators
-      |> Maybe.map (\t -> t.endpointTranslators index )
+      Maybe.map (\t -> t.endpointTranslators index ) maybeTranslators
       |> Endpoint.view
   in
-    endpoints
-    |> Array.toIndexedList
+    Array.toIndexedList endpoints
     |> List.filter (\(_, endpoint) -> endpoint.direction == direction )
     |> List.map ( apply2 viewEndpoint )
     |>(\elements ->
@@ -274,8 +288,7 @@ viewControlBank : Maybe ( Translators msg ) -> Array Control -> Html.Html msg
 viewControlBank maybeTranslators controls =
   let
     viewControl index =
-      maybeTranslators
-      |> Maybe.map (\t -> t.controlTranslators index )
+      Maybe.map (\t -> t.controlTranslators index ) maybeTranslators
       |> Control.view
   in
     Html.div
