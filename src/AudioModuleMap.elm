@@ -81,6 +81,7 @@ type Msg
   | ControlClick String
   | ControlInput Id Int String
   | FocusResult (Result Dom.Error ())
+  | Reinitialize
 
 type alias DragState =
   { dragged : Draggable
@@ -159,14 +160,18 @@ endpointAt (id, index) model =
 subscriptions : Model -> Sub Msg
 subscriptions { dragState } =
   let
-    subs = Sub.batch
+    defaultSubs =
+      [ Browser.Events.onResize (\_ _ -> Reinitialize )
+      ]
+    mouseSubs =
       [ ContinueDrag
       |> Browser.Events.onMouseMove << MouseEvent.messageDecoder
       , EndDrag
       |> Browser.Events.onMouseUp << Decode.succeed
       ]
+      ++ defaultSubs
   in
-    ifAnything subs Sub.none dragState
+    Sub.batch ( ifAnything mouseSubs defaultSubs dragState )
 
 --------------------------------------------------------------------------------
 -- Update ----------------------------------------------------------------------
@@ -204,6 +209,8 @@ update msg model =
       )
     FocusResult _ ->
       ( model, Cmd.none )
+    Reinitialize ->
+      ( model, initializeEndpoints model )
 
 initializeEndpoints : Model -> Cmd Msg
 initializeEndpoints model =
