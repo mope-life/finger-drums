@@ -4,54 +4,34 @@
   <meta charset="utf-8">
   <title>finger-drums</title>
   <link rel="stylesheet" href="styles/main.css">
-
-  <!-- favicon bs -->
-  <meta name="theme-color" content="#141414">
-  <link rel="icon" href="/assets/favicon.svg">
-  <link rel="mask-icon" href="/assets/mask-icon.svg" color="lime">
-  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
-  <link rel="manifest" href="manifest.json">
-
-  <script type="module">
-    import "./scripts/main.js"
-  </script>
-  <script src = "./scripts/elements/knob.js"></script>
-  <script src = "./scripts/elements/keys.js"></script>
-  <script src="./scripts/elm.js"></script>
+  <link rel="icon" href="assets/favicon.svg">
 </head>
-
 <body>
   <div id="audio-module-map"></div>
-
   <template id="keys-template">
     <style>
       :host {
         position: relative;
         display: block;
       }
-
       * {
         box-sizing: border-box;
       }
-
       #top-row {
         height: 55%;
         width: 100%;
         z-index: 2;
       }
-
       #bottom-row {
         height: 100%;
         width: 100%;
         z-index: 1;
       }
-
       #top-row, #bottom-row {
         display: flex;
         position: absolute;
         top: 0;
       }
-
       .key, .spacer {
         height: 100%;
         border-left: 1px solid transparent;
@@ -59,41 +39,34 @@
         position: relative;
         background-clip: content-box;
         font: 0.5em monospace;
-        border-radius: var(--key-border-radius);
+        border-radius: 0.5em;
         flex: 1;
       }
-
       .key span {
         position: absolute;
         bottom: 0;
         left: 10%;
       }
-
       .key.white {
         color: black;
-        background-color: var(--piano-key-color);
+        background-color: ivory;
       }
-
       .key.black {
         color: white;
         background-color: black;
       }
-
       .spacer {
         background-color: transparent;
       }
-
       .key.white.held {
         background-color: #fdc;
         border-left: 1px inset #fdc;
       }
-
       .key.black.held {
         background-color: #521;
         border-left: 1px inset #300;
       }
     </style>
-
     <!-- Top row (black keys) -->
     <div class="key-row" id="top-row">
       <div class="spacer"></div>
@@ -128,7 +101,6 @@
       <div class="white key b-e" id='/'><span>/</span></div>
     </div>
   </template>
-
   <template id="knob-template">
     <style>
       svg {
@@ -167,5 +139,8 @@
       </g>
     </svg>
   </template>
+
+  <script src="./scripts/elm.js"></script>
+  <script src="./scripts/main.js" type="module"></script>`
 </body>
 </html>

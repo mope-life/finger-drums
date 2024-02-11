@@ -1,21 +1,7 @@
 :root {
-  --wire-color: yellow;
-  --wire-hover-color: #ffff0080;
-  --piano-key-color: #ffffe8;
-  --key-border-radius: 0.5em;
-  --map-background: #141414;
-  --module-background: #777;
-  --module-border: 5px outset #999;
-  --label-font: 1em monospace;
-  --prototype-bank-background: #bfbfbf;
-
-  --number-input-color: lime;
-  --number-input-background-color: black;
-  --number-input-width: 6ch;
-  --number-input-font: monospace;
-
-  --keys-height: 150px;
-  --keys-width: 350px;
+  --module-background-color: #777;
+  --module-border-color: #999;
+  --sidebar-background-color: #bfbfbf;
 }
 
 * {
@@ -26,6 +12,11 @@ body {
   margin: 0;
   padding: 0;
   overflow: hidden;
+}
+
+input,
+.audio-module {
+  font-family: monospace;
 }
 
 #connection-map {
@@ -40,17 +31,17 @@ body {
 
 #connection-map line {
   /* cursor: url(../assets/scissors.svg) 10 3, auto; */
-  stroke: var(--wire-color);
+  stroke: yellow;
   stroke-width: 3;
 }
 
 #connection-map line:hover {
   stroke-width: 7;
-  stroke: var(--wire-hover-color);
+  stroke: #ffff0080;
 }
 
 #audio-module-map {
-  background: var(--map-background);
+  background: #141414;
   position: absolute;
   height: 100%;
   width: 100%;
@@ -59,7 +50,7 @@ body {
 }
 
 #prototype-bank {
-  background: var(--prototype-bank-background);
+  background: var(--sidebar-background-color);
   height: 100%;
   width: fit-content;
   position: relative;
@@ -90,9 +81,9 @@ body {
   flex-direction: row;
   justify-content: space-between;
   height: min-content;
-  background: var(--prototype-bank-background);
+  background: var(--sidebar-background-color);
   flex: 1;
-  border-left: 2px dotted var(--module-background);
+  border-left: 2px dotted var(--module-background-color);
 }
 
 .audio-module {
@@ -102,8 +93,8 @@ body {
 
 #prototype-bank>.audio-module,
 #audio-module-map>.audio-module {
-  background: var(--module-background);
-  border: var(--module-border);
+  background: var(--module-background-color);
+  border: 5px outset var(--module-border-color);
 }
 
 #audio-module-map>.audio-module {
@@ -117,11 +108,12 @@ body {
 }
 
 #controller-bank>.audio-module {
-  width: min-content;
-  height: min-content;
   padding: 10px;
-  border-right: 2px dotted var(--module-background);
   flex-direction: column-reverse;
+}
+
+#controller-bank>.audio-module:not(:last-child) {
+  border-right: 2px dotted var(--module-background-color);
 }
 
 .endpoint-jack {
@@ -136,7 +128,7 @@ body {
 }
 
 .endpoint-jack:hover {
-  border-color: var(--wire-hover-color);
+  border-color: #ffff0080;
 }
 
 .endpoint-wrapper {
@@ -146,13 +138,33 @@ body {
 }
 
 .endpoint-bank {
-  font: var(--label-font);
   display: flex;
   justify-content: start;
   align-items: stretch;
   flex-direction: column;
   flex-grow: 0;
   box-sizing: content-box;
+}
+
+.endpoint-bank:nth-child(1 of .endpoint-bank):not(:empty) {
+  border-right: 2px inset var(--module-border-color);
+}
+
+.endpoint-bank:nth-child(2 of .endpoint-bank):not(:empty) {
+  border-left: 2px inset var(--module-border-color);
+}
+
+.endpoint-bank:not(:empty) {
+  padding: 0 2px;
+  width: 6ch;
+}
+
+.endpoint-bank label {
+  top: -5px;
+  position: relative;
+  display: inline-block;
+  line-height: 10px;
+  margin: 0;
 }
 
 #controller-bank>.audio-module .endpoint-bank {
@@ -162,19 +174,6 @@ body {
   justify-content: space-around;
   flex-grow: 0;
   box-sizing: content-box;
-}
-
-.endpoint-bank:nth-child(1 of .endpoint-bank):not(:empty) {
-  border-right: 2px inset #999;
-}
-
-.endpoint-bank:nth-child(2 of .endpoint-bank):not(:empty) {
-  border-left: 2px inset #999;
-}
-
-.endpoint-bank:not(:empty) {
-  padding: 0 2px;
-  width: 6ch;
 }
 
 .control-bank,
@@ -189,43 +188,6 @@ body {
   padding: 0 2px;
 }
 
-.grabbable {
-  cursor: grab;
-}
-
-keys-control {
-  height: var(--keys-height);
-  width: var(--keys-width);
-  font-size: 18pt;
-}
-
-knob-control {
-  padding: 1px;
-  height: 8ch;
-}
-
-input[type=number] {
-  color: var(--number-input-color);
-  background-color: var(--number-input-background-color);
-  font: var(--number-input-font);
-  width: var(--number-input-width);
-  border-color: #999;
-
-  /*Hide the arrows on inputs (polyfill)*/
-  -moz-appearance: textfield;
-}
-
-/*Hide the arrows on inputs (polyfill)*/
-input::-webkit-outer-spin-button,
-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-label {
-  font: var(--label-font);
-}
-
 .control-bank label {
   display: flex;
   flex-direction: row;
@@ -237,10 +199,25 @@ label {
   margin-left: 5px;
 }
 
-.endpoint-bank label {
-  top: -5px;
-  position: relative;
-  display: inline-block;
-  line-height: 10px;
-  margin: 0;
+.grabbable {
+  cursor: grab;
+}
+
+keys-control {
+  height: 150px;
+  width: 350px;
+  font-size: 18pt;
+}
+
+knob-control {
+  padding: 1px;
+  height: 8ch;
+}
+
+input[type=number] {
+  color: lime;
+  background-color: black;
+  width: 6ch;
+  border-color: var(--module-border-color);
+  appearance: textfield;
 }
