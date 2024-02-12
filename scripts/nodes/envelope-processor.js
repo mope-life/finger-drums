@@ -5,7 +5,7 @@ const MESSAGE_TYPE = {
   TRIGGER_OFF: 3
 }
 
-class EnvelopeProcessor extends AudioWorkletProcessor  {
+class EnvelopeProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       {
@@ -58,7 +58,7 @@ class EnvelopeProcessor extends AudioWorkletProcessor  {
     this._lastGateState = false;
     this._lastTriggerState = false;
 
-	// This gives us a way to destroy the envelope when we have to
+    // This gives us a way to destroy the envelope when we have to
     this.port.onmessage = message => {
       this._maintain = message.data;
     }

@@ -1,4 +1,4 @@
-module AudioModuleMap exposing (main)
+port module AudioModuleMap exposing (main)
 
 import Browser
 import Browser.Dom as Dom
@@ -8,6 +8,7 @@ import Html.Attributes as Attributes
 import Svg
 import Svg.Attributes
 import Json.Decode as Decode
+import Json.Encode as Encode
 import Dict exposing (Dict)
 import Set exposing (Set)
 import Array exposing (Array)
@@ -17,9 +18,11 @@ import AudioModule exposing (AudioModule, PrototypeModule, Type(..), Mode(..))
 import AudioModule.Translators exposing (Translators)
 import AudioModule.Endpoint exposing (Endpoint)
 import Utility exposing (..)
+import WebAudio
+import WebAudio.Property
 
 --------------------------------------------------------------------------------
--- Initialization --------------------------------------------------------------
+-- Main ------------------------------------------------------------------------
 main : Program () Model Msg
 main =
   Browser.element
@@ -28,6 +31,11 @@ main =
     , update = update
     , subscriptions = subscriptions
     }
+
+port toWebAudio : Encode.Value -> Cmd msg
+
+--------------------------------------------------------------------------------
+-- Initialization --------------------------------------------------------------
 
 init : () -> ( Model, Cmd Msg )
 init _ =
@@ -190,6 +198,37 @@ subscriptions { dragState } =
 -- Update ----------------------------------------------------------------------
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+  updateUi msg model
+  |> updateAudio
+
+updateAudio : ( Model, Cmd Msg) -> ( Model, Cmd Msg )
+updateAudio ( model, cmd ) =
+  ( model
+  , Cmd.batch
+    [ cmd
+    , buildAudioGraph model
+      |> Encode.list WebAudio.encode
+      |> toWebAudio
+    ]
+  )
+
+buildAudioGraph : Model -> List WebAudio.Node
+buildAudioGraph _ =
+  -- TODO: make the whole thing work ;)
+  -- For now we can turn on mosquito noise by uncommenting this line:
+  always [ ]
+  [ WebAudio.oscillator
+    [ WebAudio.Property.freq 440
+    , WebAudio.Property.type_ "sawtooth"
+    ]
+    [ WebAudio.gain
+      [ WebAudio.Property.gain 0.1 ]
+      [ WebAudio.audioDestination ]
+    ]
+  ]
+
+updateUi : Msg -> Model -> ( Model, Cmd Msg )
+updateUi msg model =
   case msg of
     CreateAudioModule type_ mouseInfo ->
       let
